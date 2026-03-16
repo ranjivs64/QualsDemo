@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Qualification - Review</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' } },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; text-rendering: optimizeLegibility;}
+        
+        /* Tree lines */
+        .tree-line::before {
+            content: '';
+            position: absolute;
+            top: 24px;
+            left: 11px;
+            bottom: -8px;
+            width: 2px;
+            background-color: #e5e7eb;
+            z-index: 0;
+            transition: all 0.2s;
+        }
+        .tree-node:last-child > .tree-line::before { display: none; }
+        
+        .interactive-card { transition: all 0.2s ease; cursor: pointer; }
+        .interactive-card:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .interactive-card.selected { border-color: #2563eb; ring: 2px; ring-color: #bfdbfe; }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .focus-box { transition: all 0.3s ease; }
+        .focus-box-active { background-color: rgba(24cd, 172, 54, 0.4); border-color: #d97706; box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.3); }
+
+        #toast {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            transform: translateY(100%);
+            opacity: 0;
+        }
+        #toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        /* Smooth Collapse */
+        .tree-children {
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+            overflow: hidden;
+            opacity: 1;
+            max-height: 2000px; /* arbitrary high number */
+        }
+        .tree-children.collapsed {
+            max-height: 0;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col bg-gray-50 text-gray-900 overflow-hidden relative">
+
+    <!-- Global Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-lg shadow-xl font-medium text-sm border border-gray-700 pointer-events-none">
+        <i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>
+        <span>Saved to Persistence API successfully. Redirecting...</span>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 h-16 flex-shrink-0 flex items-center justify-between px-4 sm:px-6 relative z-10">
+        <div class="flex items-center gap-4">
+            <a href="index.html" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
+            </a>
+            <div>
+                <h1 class="font-semibold text-gray-900 text-sm">Review Extraction</h1>
+                <p class="text-xs text-gray-500">BTEC_Level3_Business_Spec.pdf</p>
+            </div>
+            <span id="headerBadge" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200 transition-colors">
+                Needs Validation
+            </span>
+        </div>
+        <div class="flex items-center gap-3">
+            <button class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm active:scale-95 transition-all">
+                Reprocess Document
+            </button>
+            <button id="btnApprove" onclick="handleApprove()" class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
+                <i data-lucide="check-circle" class="w-4 h-4"></i> Approve & Persist
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-grow flex h-[calc(100vh-64px)]">
+        
+        <!-- Left Pane: PDF Viewer Mock -->
+        <section class="w-1/2 bg-gray-800 flex flex-col border-r border-gray-200">
+            <div class="h-12 bg-gray-900 flex items-center justify-between px-4 text-gray-300 text-xs">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                    <span>Source Document (Page 14 of 92)</span>
+                </div>
+                <div class="flex gap-2 items-center bg-gray-800 rounded px-2">
+                    <button class="p-1 hover:text-white"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
+                    <span class="px-2 border-l border-r border-gray-700 text-[10px]">100%</span>
+                    <button class="p-1 hover:text-white"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
+                </div>
+            </div>
+            <div class="flex-grow p-8 overflow-y-auto flex justify-center w-full" id="pdfContainer">
+                <!-- Mock PDF Page -->
+                <div class="bg-white w-full max-w-lg shadow-2xl relative transition-all duration-300 ease-in-out" style="height: 800px;">
+                    <!-- Highlight Box (Linked to red confidence issue) -->
+                    <div id="pdfFocusBox" class="focus-box absolute top-[280px] left-[40px] right-[40px] h-[60px] bg-amber-300/30 border-2 border-amber-400 group">
+                        <span id="pdfFocusIcon" class="absolute -top-3 -right-3 bg-amber-500 text-white rounded-full p-1 shadow transition-colors">
+                            <i data-lucide="alert-triangle" class="w-3 h-3 icon-alert"></i>
+                            <i data-lucide="check" class="w-3 h-3 hidden icon-check"></i>
+                        </span>
+                    </div>
+                    
+                    <!-- Mock Text -->
+                    <div class="p-10 text-gray-800">
+                        <h2 class="text-2xl font-bold border-b border-gray-900 pb-2 mb-6 pointer-events-none">Unit 3: Personal and Business Finance</h2>
+                        <b class="text-sm font-bold uppercase tracking-wider text-gray-500 pointer-events-none">Unit Reference Number</b>
+                        <p class="mb-4 pointer-events-none">T/507/5000</p>
+
+                        <b class="text-sm font-bold uppercase tracking-wider text-gray-500 pointer-events-none">Guided Learning Hours (GLH)</b>
+                        <p class="mb-4 text-xl font-bold bg-amber-100 inline-block px-1 transition-colors" id="pdfGlhText">120?</p>
+
+                        <b class="text-sm font-bold uppercase tracking-wider text-gray-500 pointer-events-none">Description</b>
+                        <p class="text-sm leading-relaxed mb-6 pointer-events-none">Learners study the purpose and importance of personal and business finance. They will develop the skills and knowledge needed to understand, analyse and prepare financial information.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Pane: Extracted Structure -->
+        <section class="w-1/2 bg-gray-50 overflow-y-auto">
+            <div class="p-6 max-w-3xl mx-auto pb-32">
+                <div class="mb-6 flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-gray-900">Extracted Hierarchy</h2>
+                    <span class="text-xs font-medium text-gray-500 flex items-center gap-1 bg-white px-2 py-1 rounded border border-gray-200">
+                        <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i> Click nodes to select
+                    </span>
+                </div>
+
+                <!-- Tree Root -->
+                <div class="relative w-full">
+                    
+                    <!-- Root Node: Qualification -->
+                    <div class="relative z-10 flex gap-3 mb-4 tree-node w-full">
+                        <div class="tree-line"></div>
+                        <div class="w-6 h-6 rounded border border-gray-300 bg-white flex items-center justify-center flex-shrink-0 mt-3 shadow-sm cursor-pointer hover:bg-gray-50" onclick="toggleTree(this)">
+                            <i data-lucide="minus" class="w-3 h-3 text-gray-500 minus-icon"></i>
+                            <i data-lucide="plus" class="w-3 h-3 text-gray-500 plus-icon hidden"></i>
+                        </div>
+                        <div class="flex-grow bg-white border border-gray-200 rounded-xl p-4 shadow-sm interactive-card" onclick="selectCard(this)">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-blue-200">Qualification</span>
+                                <span class="flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> High Confidence
+                                </span>
+                            </div>
+                            <h3 class="font-semibold text-gray-900">Pearson BTEC Level 3 National Extended Diploma in Business</h3>
+                            <div class="mt-3 flex gap-6 text-sm">
+                                <div><span class="text-gray-500 block text-xs">Total Qual Time</span> <span class="font-medium">1080 Hours</span></div>
+                                <div><span class="text-gray-500 block text-xs">Level</span> <span class="font-medium">Level 3</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Level 2: Groups -->
+                    <div class="pl-9 relative tree-children">
+                                                
+                        <!-- Group 1 -->
+                        <div class="relative z-10 flex gap-3 mb-4 tree-node">
+                            <div class="tree-line"></div>
+                            <div class="w-6 h-6 rounded border border-gray-300 bg-white flex items-center justify-center flex-shrink-0 mt-3 shadow-sm cursor-pointer hover:bg-gray-50" onclick="toggleTree(this)">
+                                <i data-lucide="minus" class="w-3 h-3 text-gray-500 minus-icon"></i>
+                                <i data-lucide="plus" class="w-3 h-3 text-gray-500 plus-icon hidden"></i>
+                            </div>
+                            <div class="flex-grow bg-white border border-gray-200 rounded-xl p-4 shadow-sm interactive-card" onclick="selectCard(this)">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-purple-200">Unit Group</span>
+                                </div>
+                                <h3 class="font-semibold text-gray-900">Mandatory Units</h3>
+                                <div class="mt-1 text-xs font-medium text-gray-600 bg-gray-50 inline-block px-2 py-1 rounded border border-gray-200">Rule: Must complete 7 units.</div>
+                            </div>
+                        </div>
+
+                        <!-- Level 3: Units under Group 1 -->
+                        <div class="pl-9 relative tree-children">
+                            <!-- Unit 1 (Perfect) -->
+                            <div class="relative z-10 flex gap-3 mb-4 tree-node">
+                                <div class="w-6 h-6 rounded-full border-2 border-gray-200 bg-gray-50 flex-shrink-0 mt-3 relative z-10 flex items-center justify-center">
+                                    <i data-lucide="check" class="text-gray-400 w-3 h-3"></i>
+                                </div>
+                                <div class="flex-grow bg-white border border-gray-200 rounded-xl p-3 shadow-sm interactive-card opacity-75 hover:opacity-100" onclick="selectCard(this)">
+                                    <div class="flex justify-between items-center">
+                                        <div class="text-sm font-medium text-gray-800">Unit 1: Exploring Business</div>
+                                        <div class="text-xs text-gray-400 bg-gray-100 px-2 rounded">GLH 90</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Unit 3 (Needs Validation) -->
+                            <div class="relative z-10 flex gap-3 mb-4 tree-node">
+                                <div id="unitIndicator" class="w-6 h-6 rounded-full border-2 border-amber-300 bg-amber-50 flex flex-shrink-0 mt-3 relative z-10 items-center justify-center transition-colors">
+                                   <i data-lucide="alert-triangle" class="w-3 h-3 text-amber-500 icon-alert"></i>
+                                   <i data-lucide="check" class="w-3 h-3 text-emerald-600 hidden icon-check"></i>
+                                </div>
+                                
+                                <div id="unitCard" class="flex-grow bg-white border-2 border-amber-400 rounded-xl p-4 shadow-md transition-all interactive-card" onclick="selectCard(this, true)">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <span class="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-teal-200">Unit</span>
+                                        <span id="unitBadge" class="flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md border border-amber-200 uppercase tracking-wide transition-colors">
+                                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 icon-alert"></i>
+                                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 hidden icon-check"></i>
+                                            <span class="badge-text">Ambiguous</span>
+                                        </span>
+                                    </div>
+                                    
+                                    <h3 class="font-semibold text-gray-900 text-[15px]">Unit 3: Personal and Business Finance</h3>
+                                    
+                                    <div class="mt-3 flex gap-3 text-sm bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                                        <div class="flex-1">
+                                            <span class="text-gray-500 block text-[11px] uppercase tracking-wider font-semibold mb-1">Reference No</span> 
+                                            <span class="font-medium text-gray-900">T/507/5000</span>
+                                        </div>
+                                        <div class="flex-1 border-l border-gray-200 pl-3">
+                                            <span id="glhLabel" class="text-amber-700 block text-[11px] uppercase tracking-wider font-bold mb-1 transition-colors flex items-center gap-1">
+                                                GLH (Verify) <i data-lucide="help-circle" class="w-3 h-3"></i>
+                                            </span> 
+                                            <div class="flex items-center gap-2">
+                                                <input type="text" id="glhInput" value="120" class="border border-amber-400 rounded px-2 py-1 bg-white font-medium text-gray-900 text-sm w-16 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors">
+                                                <button id="btnVerify" onclick="handleVerify(event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-semibold px-2 py-1 rounded border border-amber-300 transition-colors">Verify</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="unitWarning" class="mt-3 text-xs font-medium text-amber-700 flex items-start gap-1.5 bg-amber-50 rounded p-2 border border-amber-100">
+                                        <i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span>AI extracted an ambiguous trailing character ("120?"). Source contains smudged text. Please verify formatting.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div> <!-- End Level 3 -->
+                    </div> <!-- End Level 2 -->
+                </div> <!-- End Tree Root -->
+
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Init icons
+        lucide.createIcons();
+
+        // UI toggles
+        function toggleTree(element) {
+            const minus = element.querySelector('.minus-icon');
+            const plus = element.querySelector('.plus-icon');
+            // Element is the div wrapping the icon. The tree-children is a sibling of the parent.
+            const wrapper = element.closest('.tree-node');
+            const children = wrapper.nextElementSibling;
+            
+            if(children && children.classList.contains('tree-children')) {
+                children.classList.toggle('collapsed');
+                if(children.classList.contains('collapsed')) {
+                    minus.classList.add('hidden');
+                    plus.classList.remove('hidden');
+                } else {
+                    plus.classList.add('hidden');
+                    minus.classList.remove('hidden');
+                }
+            }
+        }
+
+        function selectCard(element, triggerFocus = false) {
+            // Remove selection from all
+            document.querySelectorAll('.interactive-card').forEach(el => {
+                el.classList.remove('ring-2', 'ring-primary-400', 'border-primary-500');
+            });
+            // Add to clicked
+            element.classList.add('ring-2', 'ring-primary-400', 'border-primary-500');
+            
+            // If it's the specific unit we are mocking, flash the PDF highlight
+            if(triggerFocus) {
+                const pdfBox = document.getElementById('pdfFocusBox');
+                pdfBox.classList.add('focus-box-active');
+                setTimeout(() => {
+                    pdfBox.classList.remove('focus-box-active');
+                }, 800);
+            }
+        }
+
+        // Fix Workflow Action
+        function handleVerify(event) {
+            event.stopPropagation(); // prevent card select logic
+            
+            const card = document.getElementById('unitCard');
+            const indicator = document.getElementById('unitIndicator');
+            const input = document.getElementById('glhInput');
+            const btn = document.getElementById('btnVerify');
+            const warning = document.getElementById('unitWarning');
+            const badge = document.getElementById('unitBadge');
+            const label = document.getElementById('glhLabel');
+            const pdfBox = document.getElementById('pdfFocusBox');
+            const pdfIcon = document.getElementById('pdfFocusIcon');
+            const pdfText = document.getElementById('pdfGlhText');
+
+            // 1. Update main card style
+            card.classList.remove('border-amber-400');
+            card.classList.add('border-emerald-200', 'ring-2', 'ring-emerald-100'); // make it look verified
+            
+            // 2. Update Indicator dot
+            indicator.classList.remove('border-amber-300', 'bg-amber-50');
+            indicator.classList.add('border-emerald-300', 'bg-emerald-50');
+            indicator.querySelector('.icon-alert').classList.add('hidden');
+            indicator.querySelector('.icon-check').classList.remove('hidden');
+
+            // 3. Update Badge
+            badge.classList.remove('bg-amber-100', 'text-amber-800', 'border-amber-200');
+            badge.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+            badge.querySelector('.icon-alert').classList.add('hidden');
+            badge.querySelector('.icon-check').classList.remove('hidden');
+            badge.querySelector('.badge-text').innerText = 'Verified';
+
+            // 4. Update Input area
+            input.classList.remove('border-amber-400');
+            input.classList.add('border-emerald-200', 'bg-gray-50', 'text-emerald-800');
+            input.setAttribute('readonly', 'true');
+            btn.classList.add('hidden'); // Hide verify button
+            label.classList.remove('text-amber-700');
+            label.classList.add('text-gray-500');
+            label.innerHTML = 'GLH (Verified) <svg class="lucide lucide-check w-3 h-3 text-emerald-500"><path d="M20 6 9 17l-5-5"></path></svg>';
+            
+            // Hide Warning
+            warning.classList.add('hidden');
+
+            // 5. Update PDF Mock Highlight
+            pdfBox.classList.remove('bg-amber-300/30', 'border-amber-400');
+            pdfBox.classList.add('bg-emerald-300/20', 'border-emerald-400');
+            pdfIcon.classList.remove('bg-amber-500');
+            pdfIcon.classList.add('bg-emerald-500');
+            pdfIcon.querySelector('.icon-alert').classList.add('hidden');
+            pdfIcon.querySelector('.icon-check').classList.remove('hidden');
+            pdfText.innerText = input.value;
+            pdfText.classList.remove('bg-amber-100');
+            pdfText.classList.add('bg-emerald-100', 'text-emerald-800');
+            
+            // 6. Update Global Header Status
+            const headerBadge = document.getElementById('headerBadge');
+            headerBadge.classList.remove('bg-amber-100', 'text-amber-800', 'border-amber-200');
+            headerBadge.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+            headerBadge.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 mr-1 inline"></i> Ready to Persist';
+            lucide.createIcons();
+        }
+
+        // Approve Workflow Action
+        function handleApprove() {
+            const btn = document.getElementById('btnApprove');
+            const toast = document.getElementById('toast');
+            
+            btn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Persisting...';
+            btn.classList.add('opacity-90', 'pointer-events-none');
+            
+            setTimeout(() => {
+                toast.classList.add('show');
+                btn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i> Approve & Persist';
+                btn.classList.remove('opacity-90', 'pointer-events-none');
+                lucide.createIcons();
+                
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 2000);
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

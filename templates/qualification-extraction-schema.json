@@ -1,0 +1,117 @@
+{
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "qualificationCode",
+    "confidence",
+    "reviewReady",
+    "pages",
+    "documentFocus",
+    "qualification"
+  ],
+  "properties": {
+    "qualificationCode": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "reviewReady": {
+      "type": "boolean"
+    },
+    "pages": {
+      "type": "object",
+      "required": ["current", "total"],
+      "properties": {
+        "current": { "type": "number" },
+        "total": { "type": "number" }
+      }
+    },
+    "documentFocus": {
+      "type": "object",
+      "required": ["top", "height", "label"],
+      "properties": {
+        "top": { "type": "number" },
+        "height": { "type": "number" },
+        "label": { "type": "string" }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "required": ["id", "kind", "title", "confidence", "fields", "children"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string", "const": "Qualification" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+        "fields": { "type": "object" },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "title", "confidence", "fields", "children"],
+            "properties": {
+              "id": { "type": "string" },
+              "kind": {
+                "type": "string",
+                "enum": ["Unit Group", "Unit", "Grade Scheme"]
+              },
+              "title": { "type": "string" },
+              "summary": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+              "fields": { "type": "object" },
+              "guidance": { "type": "string" },
+              "needsAttention": { "type": "boolean" },
+              "focus": {
+                "type": "object",
+                "properties": {
+                  "top": { "type": "number" },
+                  "height": { "type": "number" },
+                  "label": { "type": "string" }
+                }
+              },
+              "children": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/node" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id", "kind", "title", "confidence", "fields", "children"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["Unit Group", "Unit", "Grade Scheme"]
+        },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+        "fields": { "type": "object" },
+        "guidance": { "type": "string" },
+        "needsAttention": { "type": "boolean" },
+        "focus": {
+          "type": "object",
+          "properties": {
+            "top": { "type": "number" },
+            "height": { "type": "number" },
+            "label": { "type": "string" }
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/node" }
+        }
+      }
+    }
+  }
+}

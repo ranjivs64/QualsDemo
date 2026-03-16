@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Qualification - Upload</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' } },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f9fafb; text-rendering: optimizeLegibility; }
+        .hero-mesh {
+            background-color: #f8fafc;
+            background-image: radial-gradient(at 40% 20%, hsla(220, 80%, 70%, 0.1) 0px, transparent 50%),
+                              radial-gradient(at 80% 0%, hsla(189, 80%, 60%, 0.1) 0px, transparent 50%),
+                              radial-gradient(at 0% 50%, hsla(260, 80%, 60%, 0.05) 0px, transparent 50%);
+        }
+        .upload-zone {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .upload-zone-drag {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+            transform: scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        
+        @keyframes fillBar {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        .progress-animate {
+            animation: fillBar 3s ease-in-out forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen hero-mesh text-gray-900 flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold shadow-md">Q</div>
+                <span class="font-semibold text-lg tracking-tight text-gray-900">QualExtract AI</span>
+            </div>
+            <nav class="flex gap-6">
+                <a href="#" class="text-sm font-medium text-primary-600 border-b-2 border-primary-600 h-16 flex items-center">Extract</a>
+                <a href="#" class="text-sm font-medium text-gray-500 hover:text-gray-900 h-16 flex items-center transition-colors">History</a>
+                <a href="#" class="text-sm font-medium text-gray-500 hover:text-gray-900 h-16 flex items-center transition-colors">Config</a>
+            </nav>
+            <div class="flex items-center gap-4">
+                <button class="text-gray-400 hover:text-gray-600">
+                    <i data-lucide="bell" class="w-5 h-5"></i>
+                </button>
+                <div class="w-8 h-8 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center text-sm font-medium text-gray-600 cursor-pointer hover:ring-2 hover:ring-primary-500 transition-all">DA</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow flex flex-col items-center p-6 mt-10">
+        <div class="max-w-2xl w-full">
+            
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">Extract Qualification Data</h1>
+                <p class="text-gray-500">Upload a PDF specification document. Our AI will extract the structure for your review.</p>
+            </div>
+
+            <!-- Upload Card -->
+            <div class="glass-panel rounded-2xl shadow-lg p-8 sm:p-12 text-center" id="uploadCard">
+                
+                <!-- Default State -->
+                <div id="uploadDefault" class="upload-zone border-2 border-dashed border-gray-300 hover:border-primary-400 hover:bg-primary-50/50 rounded-xl p-12 cursor-pointer flex flex-col items-center justify-center bg-white/50" onclick="document.getElementById('fileInput').click()">
+                    <i data-lucide="upload-cloud" class="w-12 h-12 text-primary-500 mb-4"></i>
+                    <h3 class="text-lg font-medium text-gray-900 mb-1">Click to upload or drag and drop</h3>
+                    <p class="text-sm text-gray-500 mb-6">PDF files up to 50MB</p>
+                    <button class="bg-primary-600 text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:bg-primary-700 transition-colors shadow-sm hover:shadow active:scale-95 pointer-events-none">Select File</button>
+                    <!-- Simulated Hidden File Input -->
+                    <input type="file" id="fileInput" class="hidden" accept=".pdf" onchange="handleFileSelect(event)" />
+                </div>
+
+                <!-- Processing State (Hidden normally) -->
+                <div id="uploadProcessing" class="hidden flex flex-col items-center justify-center p-8 bg-white/50 rounded-xl">
+                    <div class="relative w-16 h-16 mb-6">
+                        <svg class="animate-spin text-primary-200 w-16 h-16" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75 text-primary-600" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <i data-lucide="file-text" class="w-6 h-6 text-primary-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Analyzing Document Layout...</h3>
+                    <p class="text-sm text-gray-500 mb-6" id="processingText">Running hybrid extraction and deterministic mapping</p>
+                    
+                    <div class="w-full max-w-sm h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div id="progressBar" class="h-full bg-primary-600 rounded-full w-0"></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Recent Extractions -->
+            <div class="mt-12">
+                <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-4">Recent Jobs</h3>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <ul class="divide-y divide-gray-100" id="jobsList">
+                        <!-- Pending Review Item -->
+                        <li class="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between group">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                                    <i data-lucide="clock" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-medium text-gray-900">BTEC_Level3_Business_Spec.pdf</h4>
+                                    <p class="text-xs text-gray-500 mt-0.5">Extracted today at 10:42 AM • <span class="text-amber-600 font-medium">Review pending</span></p>
+                                </div>
+                            </div>
+                            <a href="review.html" class="opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg font-medium text-xs hover:bg-gray-50 hover:text-gray-900 shadow-sm active:scale-95">Review Now</a>
+                        </li>
+                        <!-- Completed Item -->
+                        <li class="p-4 flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                    <i data-lucide="check-circle" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-medium text-gray-900">A_Level_Maths_Syllabus_2026.pdf</h4>
+                                    <p class="text-xs text-gray-500 mt-0.5">Approved by Jane Doe • Yesterday</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full border border-gray-200">Persisted</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        const dropZone = document.getElementById('uploadDefault');
+        const processingZone = document.getElementById('uploadProcessing');
+        const progressBar = document.getElementById('progressBar');
+        const processingText = document.getElementById('processingText');
+        const jobsList = document.getElementById('jobsList');
+
+        // Drag & Drop handlers
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('upload-zone-drag');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('upload-zone-drag');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('upload-zone-drag');
+            if(e.dataTransfer.files.length > 0) {
+                simulateUpload(e.dataTransfer.files[0].name);
+            }
+        });
+
+        function handleFileSelect(e) {
+            if(e.target.files.length > 0) {
+                simulateUpload(e.target.files[0].name);
+            }
+        }
+
+        function simulateUpload(filename) {
+            // Show processing state
+            dropZone.classList.add('hidden');
+            processingZone.classList.remove('hidden');
+            progressBar.classList.add('progress-animate');
+            
+            let textSteps = [
+                "Extracting Text and Layout...",
+                "Running Semantic Schema Mapping...",
+                "Flagging Confidence Thresholds...",
+                "Finalizing Job..."
+            ];
+            
+            let stepIndex = 0;
+            let textInterval = setInterval(() => {
+                stepIndex++;
+                if (stepIndex < textSteps.length) {
+                    processingText.innerText = textSteps[stepIndex];
+                }
+            }, 700);
+
+            // Finish after 3s
+            setTimeout(() => {
+                clearInterval(textInterval);
+                finishUpload(filename);
+            }, 3000);
+        }
+
+        function finishUpload(filename) {
+            // Reset upload UI
+            processingZone.classList.add('hidden');
+            progressBar.classList.remove('progress-animate');
+            dropZone.classList.remove('hidden');
+            processingText.innerText = "Running hybrid extraction and deterministic mapping";
+
+            // Add new item to top of list
+            const li = document.createElement('li');
+            li.className = 'p-4 hover:bg-gray-50 transition-colors flex items-center justify-between group bg-blue-50/50';
+            li.innerHTML = 
+                <div class="flex items-center gap-4 animate-pulse">
+                    <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                        <i data-lucide="clock" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-900">+filename+</h4>
+                        <p class="text-xs text-gray-500 mt-0.5">Extracted just now • <span class="text-amber-600 font-medium">Review pending</span></p>
+                    </div>
+                </div>
+                <a href="review.html" class="bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg font-medium text-xs hover:bg-gray-50 hover:text-gray-900 shadow-sm active:scale-95 transition-all">Review Now</a>
+            ;
+            
+            jobsList.insertBefore(li, jobsList.firstChild);
+            lucide.createIcons();
+
+            // Stop pulse after a moment
+            setTimeout(() => {
+                li.querySelector('.animate-pulse').classList.remove('animate-pulse');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

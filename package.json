@@ -1,0 +1,17 @@
+{
+  "name": "qualextract-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Qualification PDF extraction MVP based on PRD, spec, and UX artifacts",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/**/*.test.js",
+    "ai:check": "node scripts/check-ai-connectivity.js"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/sdk-trace-node": "2.6.0",
+    "openai": "6.29.0",
+    "pdf-parse": "2.4.5"
+  }
+}

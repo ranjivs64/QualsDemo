@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QualExtract AI</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">Q</div>
+        <div>
+          <p class="eyebrow">Qualification Structure Extraction</p>
+          <h1 class="brand-title">QualExtract AI</h1>
+        </div>
+      </div>
+      <nav class="topnav" aria-label="Primary">
+        <button class="nav-link is-active" data-route="dashboard">Extract</button>
+        <button class="nav-link" data-route="review">Review</button>
+        <button class="nav-link" data-route="history">History</button>
+      </nav>
+      <div class="topbar-actions">
+        <button class="ghost-button" id="seedResetButton" type="button">Reset Demo</button>
+        <div class="avatar" aria-label="Logged in as Data Analyst">DA</div>
+      </div>
+    </header>
+
+    <main id="main-content" class="main-content">
+      <section class="view is-active" id="view-dashboard" aria-labelledby="dashboard-title">
+        <div class="hero-panel">
+          <div>
+            <p class="eyebrow">Upload -> Extract -> Verify -> Persist</p>
+            <h2 id="dashboard-title">Turn qualification PDFs into structured data</h2>
+            <p class="hero-copy">
+              This MVP implements the product flow from the PRD and spec: upload a PDF, review AI-extracted
+              qualification structures, correct low-confidence fields, and persist only approved data.
+            </p>
+          </div>
+          <div class="hero-metrics" id="heroMetrics"></div>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="panel upload-panel" aria-labelledby="upload-title">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">New Extraction</p>
+                <h3 id="upload-title">Upload qualification PDF</h3>
+              </div>
+              <span class="badge badge-neutral">Retention: 1 day</span>
+            </div>
+
+            <div class="status-banner status-banner-neutral" id="aiStatusBanner" aria-live="polite">
+              <strong>AI status</strong>
+              <span id="aiStatusText">Checking provider configuration...</span>
+            </div>
+
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-describedby="upload-help">
+              <div class="dropzone-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 7 8h3v6h4V8h3zm-7 13h14v3H5z"/></svg>
+              </div>
+              <h4>Drop a PDF here or choose a file</h4>
+              <p id="upload-help">Accepted format: PDF. Demo mode simulates extraction and review state transitions.</p>
+              <div class="dropzone-actions">
+                <button class="primary-button" id="selectFileButton" type="button">Choose PDF</button>
+                <button class="secondary-button" id="simulateUploadButton" type="button">Load Demo File</button>
+              </div>
+              <input id="fileInput" class="visually-hidden" type="file" accept=".pdf">
+            </div>
+
+            <div class="upload-progress hidden" id="uploadProgress" aria-live="polite">
+              <div class="progress-meta">
+                <strong id="progressTitle">Analyzing document</strong>
+                <span id="progressPercent">0%</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+              <p class="progress-step" id="progressStep">Validating upload payload</p>
+            </div>
+          </section>
+
+          <section class="panel queue-panel" aria-labelledby="queue-title">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Work Queue</p>
+                <h3 id="queue-title">Recent extraction jobs</h3>
+              </div>
+              <button class="ghost-button" id="openNextReviewButton" type="button">Open next review</button>
+            </div>
+            <div class="job-list" id="dashboardJobList" aria-live="polite"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-review" aria-labelledby="review-title">
+        <div class="review-header panel">
+          <div>
+            <p class="panel-kicker">Human-in-the-loop review</p>
+            <h2 id="review-title">Qualification review workspace</h2>
+            <p class="muted" id="reviewSubtitle">Select a job from the queue to begin verification.</p>
+          </div>
+          <div class="review-actions">
+            <button class="secondary-button" id="reprocessButton" type="button">Reprocess</button>
+            <button class="primary-button" id="approveButton" type="button">Approve and Persist</button>
+          </div>
+        </div>
+
+        <div class="review-layout">
+          <section class="panel document-panel" aria-labelledby="document-title">
+            <div class="panel-header compact">
+              <div>
+                <p class="panel-kicker">Source Context</p>
+                <h3 id="document-title">PDF focus view</h3>
+              </div>
+              <span class="badge badge-neutral" id="pageBadge">Page 14 of 92</span>
+            </div>
+            <div class="document-canvas" id="documentCanvas">
+              <div class="document-highlight" id="documentHighlight">
+                <div class="highlight-label" id="highlightLabel">Focus: GLH value</div>
+              </div>
+              <div class="document-page">
+                <h4>Pearson BTEC Level 3 National Extended Diploma in Business</h4>
+                <p class="document-section-label">Unit 3</p>
+                <p class="document-emphasis">Personal and Business Finance</p>
+                <div class="document-metadata">
+                  <div>
+                    <span>Reference</span>
+                    <strong>T/507/5000</strong>
+                  </div>
+                  <div>
+                    <span>GLH</span>
+                    <strong id="documentGlhValue">120?</strong>
+                  </div>
+                </div>
+                <p>
+                  Learners study the purpose and importance of personal and business finance. They develop the
+                  skills and knowledge needed to interpret, analyze, and prepare financial information.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel hierarchy-panel" aria-labelledby="hierarchy-title">
+            <div class="panel-header compact">
+              <div>
+                <p class="panel-kicker">Extracted Structure</p>
+                <h3 id="hierarchy-title">Qualification hierarchy</h3>
+              </div>
+              <span class="badge" id="reviewStatusBadge">Needs validation</span>
+            </div>
+            <div class="hierarchy-tree" id="hierarchyTree"></div>
+          </section>
+
+          <aside class="panel inspector-panel" aria-labelledby="inspector-title">
+            <div class="panel-header compact">
+              <div>
+                <p class="panel-kicker">Selected Node</p>
+                <h3 id="inspector-title">Verification inspector</h3>
+              </div>
+            </div>
+            <div id="inspectorContent" class="inspector-content empty-state">
+              <h4>No node selected</h4>
+              <p>Select a qualification, group, unit, or grade scheme to review its extracted fields and confidence.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-history" aria-labelledby="history-title">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Audit and status tracking</p>
+              <h2 id="history-title">Extraction history</h2>
+            </div>
+            <div class="history-filters">
+              <label class="filter-control">
+                <span>Status</span>
+                <select id="historyStatusFilter">
+                  <option value="all">All</option>
+                  <option value="review">Review pending</option>
+                  <option value="processing">Processing</option>
+                  <option value="persisted">Persisted</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div class="history-table-wrap">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Status</th>
+                  <th>Confidence</th>
+                  <th>Attempts</th>
+                  <th>Updated</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
+
+  <template id="jobCardTemplate">
+    <article class="job-card">
+      <div class="job-card-main">
+        <div class="job-icon"></div>
+        <div>
+          <h4 class="job-name"></h4>
+          <p class="job-meta"></p>
+        </div>
+      </div>
+      <div class="job-card-side">
+        <span class="badge job-status"></span>
+        <button class="secondary-button job-action" type="button">Open</button>
+      </div>
+    </article>
+  </template>
+
+  <template id="treeNodeTemplate">
+    <div class="tree-node">
+      <button class="tree-toggle" type="button" aria-expanded="true">-</button>
+      <div class="tree-card" tabindex="0">
+        <div class="tree-card-head">
+          <span class="tree-kind"></span>
+          <span class="badge tree-badge"></span>
+        </div>
+        <h4 class="tree-title"></h4>
+        <p class="tree-summary"></p>
+      </div>
+      <div class="tree-children"></div>
+    </div>
+  </template>
+
+  <script src="./assets/app.js"></script>
+</body>
+</html>
