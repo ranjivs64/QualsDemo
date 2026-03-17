@@ -1,12 +1,21 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { PDFParse } = require("pdf-parse");
 
 const { getJob, hydrateJobForReview } = require("./jobStore");
 const { resolveArtifactPath } = require("./uploadStore");
 const { getAiConfigurationIssues, getAiProviderName, isAiConfigured, getModelName, extractQualificationWithAi } = require("./aiClient");
 
 const seedState = JSON.parse(fs.readFileSync(path.join(__dirname, "seed-data.json"), "utf8"));
+let pdfParseConstructor;
+
+function getPdfParseConstructor() {
+  if (pdfParseConstructor) {
+    return pdfParseConstructor;
+  }
+
+  ({ PDFParse: pdfParseConstructor } = require("pdf-parse"));
+  return pdfParseConstructor;
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -422,6 +431,17 @@ async function readPdfDocument(job) {
   if (!artifactPath) {
     return { text: "", pageCount: 0 };
   }
+
+  let PDFParse;
+  try {
+    PDFParse = getPdfParseConstructor();
+  } catch {
+    return {
+      text: "",
+      pageCount: 0
+    };
+  }
+
   const buffer = fs.readFileSync(artifactPath);
   const parser = new PDFParse({ data: buffer });
   try {

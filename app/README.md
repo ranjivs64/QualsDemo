@@ -31,9 +31,9 @@ Azure AI Foundry configuration:
 ```bash
 set QUAL_AI_PROVIDER=foundry
 set FOUNDRY_API_KEY=your-key
-set FOUNDRY_ENDPOINT=https://your-foundry-endpoint
-set FOUNDRY_API_VERSION=your-api-version
-set QUAL_AI_MODEL=gpt-5.1-2026-01-15
+set FOUNDRY_ENDPOINT=https://your-resource-name.openai.azure.com
+set FOUNDRY_API_VERSION=2024-10-21
+set QUAL_AI_MODEL=gpt-4o-mini
 ```
 
 If you already have a full OpenAI-compatible Foundry base URL, you can use `FOUNDRY_BASE_URL` instead of `FOUNDRY_ENDPOINT`, but not both together.
