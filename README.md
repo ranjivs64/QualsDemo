@@ -260,6 +260,8 @@ The expected `AZURE_CREDENTIALS` JSON shape is:
 }
 ```
 
+When `AZURE_CREDENTIALS` is present, the workflow can also use its `subscriptionId` field as the default deployment subscription if you do not pass `subscription_id` and have not set `AZURE_SUBSCRIPTION_ID` separately.
+
 The workflow prefers runtime inputs when provided, otherwise it falls back to repository variables or repository secrets for subscription and resource group. The subscription ID inside `AZURE_CREDENTIALS` remains informational for this repo's current flow.
 
 If you use GitHub OIDC instead of `AZURE_CREDENTIALS`, configure these at the repository level:
