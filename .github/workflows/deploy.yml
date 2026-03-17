@@ -84,6 +84,7 @@ jobs:
     env:
       AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
       DEPLOY_RESOURCE_GROUP: ${{ inputs.resource_group || vars.AZURE_RESOURCE_GROUP || secrets.AZURE_RESOURCE_GROUP || vars.RESOURCE_GROUP || secrets.RESOURCE_GROUP }}
       DEPLOY_SUBSCRIPTION_ID: ${{ inputs.subscription_id || vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
@@ -120,8 +121,16 @@ jobs:
             exit 0
           fi
 
+          if [ -n "$AZURE_CLIENT_SECRET" ]; then
+            if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
+              echo "AZURE_CLIENT_SECRET requires AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+
           if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
-            echo "Provide either repository secret AZURE_CREDENTIALS or repository-level OIDC settings AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
+            echo "Provide either repository secret AZURE_CREDENTIALS, repository secret AZURE_CLIENT_SECRET with AZURE_CLIENT_ID and AZURE_TENANT_ID, or repository-level OIDC settings AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
             exit 1
           fi
 
@@ -132,8 +141,15 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: false
 
+      - name: Azure login with client secret
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET != ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          creds: ${{ format('{{"clientId":"{0}","clientSecret":"{1}","tenantId":"{2}","subscriptionId":"{3}"}}', env.AZURE_CLIENT_ID, env.AZURE_CLIENT_SECRET, env.AZURE_TENANT_ID, env.DEPLOY_SUBSCRIPTION_ID) }}
+          enable-AzPSSession: false
+
       - name: Azure login with OIDC
-        if: env.AZURE_CREDENTIALS == ''
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET == ''
         uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
         with:
           client-id: ${{ env.AZURE_CLIENT_ID }}
@@ -208,6 +224,7 @@ jobs:
     env:
       AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
       DEPLOY_RESOURCE_GROUP: ${{ inputs.resource_group || vars.AZURE_RESOURCE_GROUP || secrets.AZURE_RESOURCE_GROUP || vars.RESOURCE_GROUP || secrets.RESOURCE_GROUP }}
       DEPLOY_SUBSCRIPTION_ID: ${{ inputs.subscription_id || vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
@@ -222,8 +239,15 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           enable-AzPSSession: false
 
+      - name: Azure login with client secret
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET != ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          creds: ${{ format('{{"clientId":"{0}","clientSecret":"{1}","tenantId":"{2}","subscriptionId":"{3}"}}', env.AZURE_CLIENT_ID, env.AZURE_CLIENT_SECRET, env.AZURE_TENANT_ID, env.DEPLOY_SUBSCRIPTION_ID) }}
+          enable-AzPSSession: false
+
       - name: Azure login with OIDC
-        if: env.AZURE_CREDENTIALS == ''
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET == ''
         uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
         with:
           client-id: ${{ env.AZURE_CLIENT_ID }}

@@ -231,6 +231,7 @@ This repository supports both secret-based login and GitHub OIDC. OIDC is the be
 Use either:
 
 - GitHub OIDC with repository-level `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, plus either the workflow `subscription_id` input or the repository variable `AZURE_SUBSCRIPTION_ID`
+- repository secret `AZURE_CLIENT_SECRET` together with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`
 - one repository secret named `AZURE_CREDENTIALS` containing the Azure service principal JSON payload
 
 Step by step:
@@ -239,6 +240,7 @@ Step by step:
 2. If using OIDC, add a federated credential that trusts this GitHub repository and branch.
 3. At the repository level, add either:
    - OIDC configuration `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, or
+   - `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and repository secret `AZURE_CLIENT_SECRET`, or
    - one secret named `AZURE_CREDENTIALS`
 4. At the repository level, add `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` as variables or secrets if you do not want to pass them as workflow inputs.
 5. Ensure the target Azure resource group already exists.
@@ -266,6 +268,8 @@ If you use GitHub OIDC instead of `AZURE_CREDENTIALS`, configure these at the re
 - `AZURE_TENANT_ID`
 
 You do not need `AZURE_CLIENT_SECRET` for OIDC.
+
+If your federated credential is not set up yet, you can also use a repository secret named `AZURE_CLIENT_SECRET` together with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` to authenticate without OIDC.
 
 If you want to create placeholder entries first and replace them later, run:
 
