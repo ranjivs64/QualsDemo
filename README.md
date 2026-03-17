@@ -220,6 +220,8 @@ If you store them as repository variables instead, the workflow also supports:
 
 In workflow terms, `subscription_id` and `resource_group` can now come from either runtime inputs or repository variables, plus the environment selector.
 
+The workflow also accepts these same values from repository secrets if that is how they are currently stored.
+
 Everything else is provisioned and wired automatically by the workflow and Bicep template.
 
 ### One-time GitHub and Azure setup
@@ -239,11 +241,11 @@ Step by step:
 4. At the repository level, add either:
    - OIDC configuration `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, or
    - one secret named `AZURE_CREDENTIALS`
-5. At the repository level, add `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` if you do not want to pass them as workflow inputs.
+5. At the repository level, add `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` as variables or secrets if you do not want to pass them as workflow inputs.
 6. Ensure the target Azure resource group already exists.
 7. Run the workflow and either:
    - provide Azure subscription ID and Azure resource group as workflow inputs, or
-   - leave them blank and rely on repository variables `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP`
+   - leave them blank and rely on repository configuration `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP`
 8. Choose the deployment environment
 
 The expected `AZURE_CREDENTIALS` JSON shape is:
@@ -257,7 +259,7 @@ The expected `AZURE_CREDENTIALS` JSON shape is:
 }
 ```
 
-The workflow prefers runtime inputs when provided, otherwise it falls back to repository variables for subscription and resource group. The subscription ID inside `AZURE_CREDENTIALS` remains informational for this repo's current flow.
+The workflow prefers runtime inputs when provided, otherwise it falls back to repository variables or repository secrets for subscription and resource group. The subscription ID inside `AZURE_CREDENTIALS` remains informational for this repo's current flow.
 
 If you use GitHub OIDC instead of `AZURE_CREDENTIALS`, configure these at the repository level:
 
@@ -285,7 +287,7 @@ These values are created and populated by the deployment flow:
 - `FOUNDRY_MODEL`
 - `FOUNDRY_API_KEY`
 
-You do not need to store `AZURE_SUBSCRIPTION_ID` or `AZURE_RESOURCE_GROUP` as repository variables if you prefer passing them at workflow runtime, but the workflow supports both approaches.
+You do not need to store `AZURE_SUBSCRIPTION_ID` or `AZURE_RESOURCE_GROUP` at the repository level if you prefer passing them at workflow runtime, but the workflow supports both approaches.
 
 ### How to run the deployment
 

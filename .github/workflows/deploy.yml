@@ -49,9 +49,9 @@ jobs:
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_RESOURCE_GROUP: ${{ inputs.resource_group }}
           INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription_id }}
-          DEFAULT_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          LEGACY_RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
-          DEFAULT_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          DEFAULT_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || secrets.AZURE_RESOURCE_GROUP }}
+          LEGACY_RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP || secrets.RESOURCE_GROUP }}
+          DEFAULT_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           deploy_environment="$INPUT_ENVIRONMENT"
           resource_group="$INPUT_RESOURCE_GROUP"
