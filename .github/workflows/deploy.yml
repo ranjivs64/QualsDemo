@@ -66,12 +66,12 @@ jobs:
           fi
 
           if [ -z "$resource_group" ]; then
-            echo "Missing deployment resource group. Provide the workflow input or set GitHub variable AZURE_RESOURCE_GROUP or RESOURCE_GROUP." >&2
+            echo "Missing deployment resource group. Provide the workflow input or set repository variable AZURE_RESOURCE_GROUP or RESOURCE_GROUP." >&2
             exit 1
           fi
 
           if [ -z "$subscription_id" ]; then
-            echo "Missing deployment subscription ID. Provide the workflow input or set GitHub variable AZURE_SUBSCRIPTION_ID." >&2
+            echo "Missing deployment subscription ID. Provide the workflow input or set repository variable AZURE_SUBSCRIPTION_ID." >&2
             exit 1
           fi
 
@@ -107,7 +107,7 @@ jobs:
           required=(AZURE_SUBSCRIPTION_ID)
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
-              echo "Missing required GitHub environment value: $name" >&2
+              echo "Missing required repository configuration value: $name" >&2
               exit 1
             fi
           done
@@ -125,7 +125,7 @@ jobs:
           fi
 
           if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
-            echo "Provide either AZURE_CREDENTIALS or OIDC variables AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
+            echo "Provide either repository secret AZURE_CREDENTIALS or repository-level OIDC settings AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
             exit 1
           fi
 
