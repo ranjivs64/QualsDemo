@@ -177,18 +177,18 @@ Current API surface:
 
 ## Cloud Deployment Guide
 
-This section documents the most practical cloud setup for the current codebase.
+This repository now includes a GitHub Actions plus Bicep deployment path designed so the operator only supplies Azure subscription and resource group details at run time.
 
-### Recommended current cloud posture
+### What the deployment provisions
 
-For the current MVP, use:
+- Azure App Service plan
+- Azure Web App for the Node.js API and static frontend
+- Azure Key Vault for runtime secret storage
+- Azure Application Insights for telemetry plumbing
+- Azure OpenAI account
+- Azure OpenAI model deployment used by the app
 
-- Azure App Service for hosting
-- Azure AI Foundry for model hosting
-- App Service persistent storage under `/home` for SQLite and uploads
-- A single app instance only
-
-This is the simplest path because the app currently depends on:
+The app is still deployed as a single-instance MVP because it currently depends on:
 
 - SQLite on a local filesystem
 - local upload artifact storage
@@ -196,166 +196,103 @@ This is the simplest path because the app currently depends on:
 
 Do not scale this implementation out to multiple instances while it still uses SQLite and in-process job scheduling.
 
-### Before you deploy
+### Deployment files
 
-You need:
+- `.github/workflows/ci.yml` runs validation and tests
+- `.github/workflows/deploy.yml` deploys infrastructure and application code
+- `infra/main.bicep` defines the Azure resources
+- `infra/environments/*.bicepparam` hold environment-specific parameters
 
-1. An Azure subscription
-2. An Azure resource group
-3. An Azure AI Foundry model deployment
-4. An Azure App Service plan and Web App
-5. App settings for database path, uploads path, and AI configuration
+### Manual inputs at deployment time
 
-### Step 1. Sign in and choose a subscription
+When you run the deploy workflow, you only provide:
 
-```bash
-az login
-az account set --subscription "<subscription-name-or-id>"
-```
+1. Azure subscription ID
+2. Azure resource group name
+3. Deployment environment: `dev`, `staging`, or `prod`
 
-### Step 2. Create a resource group
+Everything else is provisioned and wired automatically by the workflow and Bicep template.
 
-```bash
-az group create --name rg-qualsdemo-dev --location uksouth
-```
+### One-time GitHub setup
 
-### Step 3. Prepare Azure AI Foundry
+Before the workflow can run, configure a service principal with deployment rights to the target subscription and resource group, then store these values in each GitHub deployment environment (`dev`, `staging`, `prod`):
 
-In Azure AI Foundry:
+- Environment variable `AZURE_CLIENT_ID`
+- Environment variable `AZURE_TENANT_ID`
+- Environment secret `AZURE_CLIENT_SECRET`
 
-1. Create or open your Foundry project.
-2. Deploy the model you want to use, for example GPT-5.1.
-3. Record the following values:
-   - deployment name
-   - endpoint
-   - API key
-   - API version
+The target Azure resource group must already exist.
 
-You will use those values in the App Service application settings.
+You no longer need to preconfigure:
 
-### Step 4. Create an App Service plan
+- `AZURE_SUBSCRIPTION_ID` as a repository variable
+- `FOUNDRY_ENDPOINT`
+- `FOUNDRY_API_VERSION`
+- `FOUNDRY_MODEL`
+- `FOUNDRY_API_KEY`
 
-```bash
-az appservice plan create \
-  --name asp-qualsdemo-dev \
-  --resource-group rg-qualsdemo-dev \
-  --sku B1 \
-  --is-linux
-```
+Those AI settings are now created and populated by the deployment flow.
 
-### Step 5. Create the Web App
-
-Use a Node runtime that supports `node:sqlite`. If your region does not expose a suitable managed Node runtime, deploy the app with a custom container pinned to Node 24.
-
-Example managed runtime deployment:
-
-```bash
-az webapp create \
-  --resource-group rg-qualsdemo-dev \
-  --plan asp-qualsdemo-dev \
-  --name qualsdemo-dev-<unique-suffix> \
-  --runtime "NODE|24-lts"
-```
-
-If `NODE|24-lts` is not available in your region, create the Web App with the closest supported runtime and switch to a containerized deployment before go-live.
-
-### Step 6. Configure application settings
-
-Set the app settings so SQLite and uploads are stored on the persistent App Service file system under `/home`.
-
-```bash
-az webapp config appsettings set \
-  --resource-group rg-qualsdemo-dev \
-  --name qualsdemo-dev-<unique-suffix> \
-  --settings \
-    NODE_ENV=production \
-    SCM_DO_BUILD_DURING_DEPLOYMENT=true \
-    QUAL_AI_PROVIDER=foundry \
-    FOUNDRY_API_KEY="<foundry-key>" \
-    FOUNDRY_ENDPOINT="https://<your-project>.inference.ai.azure.com" \
-    FOUNDRY_API_VERSION=2024-12-01-preview \
-    QUAL_AI_MODEL="gpt-5.1-2026-01-15" \
-    QUAL_DB_PATH="/home/site/data/qualextract.sqlite" \
-    QUAL_UPLOADS_DIR="/home/site/uploads"
-```
-
-Optional telemetry setting for future observability work:
-
-```bash
-az webapp config appsettings set \
-  --resource-group rg-qualsdemo-dev \
-  --name qualsdemo-dev-<unique-suffix> \
-  --settings APPLICATIONINSIGHTS_CONNECTION_STRING="<app-insights-connection-string>"
-```
-
-### Step 7. Enforce HTTPS
-
-```bash
-az webapp update \
-  --resource-group rg-qualsdemo-dev \
-  --name qualsdemo-dev-<unique-suffix> \
-  --https-only true
-```
-
-### Step 8. Package and deploy the code
-
-From the repo root:
-
-PowerShell:
+If you want to create placeholder entries first and replace them later, run:
 
 ```powershell
-Compress-Archive -Path app,docs,prompts,scripts,server,templates,tests,package.json,package-lock.json,server.js -DestinationPath .\qualsdemo.zip -Force
+pwsh ./scripts/bootstrap-github-deploy-placeholders.ps1 -Repository 'ranjivs64/QualsDemo'
 ```
 
-Deploy the package:
+This script creates the `dev`, `staging`, and `prod` GitHub environments if needed, then adds placeholder values for the required variables and secret.
 
-```bash
-az webapp deploy \
-  --resource-group rg-qualsdemo-dev \
-  --name qualsdemo-dev-<unique-suffix> \
-  --src-path qualsdemo.zip \
-  --type zip
-```
+### How to run the deployment
 
-### Step 9. Verify the app after deployment
+1. Open the GitHub repository.
+2. Go to the Actions tab.
+3. Select the `Deploy Azure Stack` workflow.
+4. Click `Run workflow`.
+5. Enter the Azure subscription ID.
+6. Enter the Azure resource group name.
+7. Choose the target environment.
+8. Start the workflow.
 
-Check the health endpoint:
+### What the workflow does
 
-```bash
-curl https://qualsdemo-dev-<unique-suffix>.azurewebsites.net/api/v1/health
-```
+1. Resolves the environment-specific parameter file.
+2. Logs into Azure using the configured service principal.
+3. Runs `az deployment group what-if` for a preview.
+4. Deploys the App Service, Key Vault, Application Insights, and Azure OpenAI resources.
+5. Reads deployment outputs including the web app name, Key Vault name, and Azure OpenAI account name.
+6. Retrieves the generated Azure OpenAI key and stores it in Key Vault.
+7. Packages the application.
+8. Deploys the application to Azure Web App.
 
-Check AI status:
+### Environment customization
 
-```bash
-curl https://qualsdemo-dev-<unique-suffix>.azurewebsites.net/api/v1/ai-status
-```
+Use the files under `infra/environments/` to adjust:
 
-You should see:
+- naming suffixes
+- tags
+- App Service sizing
+- environment-specific configuration values
 
-- health status `ok`
-- AI provider `foundry`
-- `configured: true` in AI status
+If you need a different Azure OpenAI model or deployment capacity, update the defaults in `infra/main.bicep` and, if needed, override them through the environment parameter files.
 
-### Step 10. Validate runtime behavior
+### Post-deployment verification
 
-After the app is live:
+After the workflow succeeds, verify:
 
-1. Open the site in a browser.
-2. Upload a PDF.
-3. Confirm the job enters `processing` and then `review`.
-4. Confirm uploaded artifacts open correctly.
-5. Confirm approval persists a qualification record.
+1. `GET /api/v1/health` returns `ok`
+2. `GET /api/v1/ai-status` reports `configured: true`
+3. PDF upload enters processing and then review
+4. artifact retrieval works
+5. qualification approval persists correctly
 
-## Recommended Azure Staging Topology
+### Recommended Azure staging topology
 
 Use this topology for the current MVP:
 
 - Azure App Service: single instance
-- Azure AI Foundry: model deployment for extraction
-- Azure Monitor / Application Insights: optional, not fully wired in code yet
+- Azure OpenAI: one model deployment for extraction
+- Application Insights: provisioned, but app observability is still partial
 
-This topology is valid for internal testing and controlled staging.
+This topology is suitable for internal testing and controlled staging.
 
 ## Production Constraints and Upgrade Path
 
@@ -378,6 +315,10 @@ Recommended production upgrade path:
 4. Replace SQLite with a managed relational database
 5. Replace local upload storage with cloud object storage
 6. Replace in-process scheduling with a real queue or worker pattern
+
+Additional Azure deployment note:
+
+- Azure OpenAI model availability is region-dependent. If the configured model is unavailable in the chosen region, update the model defaults in `infra/main.bicep` before deploying.
 7. Wire telemetry to Application Insights
 
 ## Suggested Production Target on Azure

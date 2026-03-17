@@ -1,0 +1,2 @@
+- 2026-03-17: Azure deployment is GitHub Actions plus Bicep driven; operators provide subscription ID, resource group, and environment at workflow runtime while Bicep provisions App Service, Key Vault, App Insights, and Azure OpenAI.
+- 2026-03-17: Pin GitHub Actions to commit SHAs in workflow files; use actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 instead of tag references.

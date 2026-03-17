@@ -1,0 +1,3 @@
+- 2026-03-17: Simplified deploy pipeline to remove manual Foundry inputs; deploy workflow now accepts subscription_id, resource_group, and environment.
+- 2026-03-17: infra/main.bicep now provisions Azure OpenAI account and deployment, and README cloud deployment guidance matches the workflow.
+- 2026-03-17: Validation completed with clean diagnostics for deploy.yml, ci.yml, main.bicep, and README; npm test passes 16/16 locally.
