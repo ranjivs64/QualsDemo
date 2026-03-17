@@ -37,7 +37,6 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      deploy_environment: ${{ steps.prepare.outputs.deploy_environment }}
       location: ${{ steps.prepare.outputs.location }}
       parameter_file: ${{ steps.prepare.outputs.parameter_file }}
     steps:
@@ -75,7 +74,6 @@ jobs:
 
           location="$DEFAULT_AZURE_LOCATION"
 
-          echo "deploy_environment=$deploy_environment" >> "$GITHUB_OUTPUT"
           echo "location=$location" >> "$GITHUB_OUTPUT"
           echo "parameter_file=infra/environments/$deploy_environment.bicepparam" >> "$GITHUB_OUTPUT"
 
@@ -83,7 +81,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare
     timeout-minutes: 30
-    environment: ${{ inputs.environment }}
     env:
       AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
@@ -208,7 +205,6 @@ jobs:
       - prepare
       - infra
     timeout-minutes: 30
-    environment: ${{ inputs.environment }}
     env:
       AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}

@@ -236,17 +236,16 @@ Use either:
 Step by step:
 
 1. Create an Azure app registration or service principal with deployment rights to the target subscription or resource group.
-2. If using OIDC, add a federated credential that trusts this GitHub repository and environment.
-3. In GitHub, create the deployment environments you want to use: `dev`, `staging`, and `prod`.
-4. At the repository level, add either:
+2. If using OIDC, add a federated credential that trusts this GitHub repository and branch.
+3. At the repository level, add either:
    - OIDC configuration `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, or
    - one secret named `AZURE_CREDENTIALS`
-5. At the repository level, add `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` as variables or secrets if you do not want to pass them as workflow inputs.
-6. Ensure the target Azure resource group already exists.
-7. Run the workflow and either:
+4. At the repository level, add `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` as variables or secrets if you do not want to pass them as workflow inputs.
+5. Ensure the target Azure resource group already exists.
+6. Run the workflow and either:
    - provide Azure subscription ID and Azure resource group as workflow inputs, or
    - leave them blank and rely on repository configuration `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP`
-8. Choose the deployment environment
+7. Choose the deployment environment
 
 The expected `AZURE_CREDENTIALS` JSON shape is:
 
@@ -275,6 +274,8 @@ pwsh ./scripts/bootstrap-github-deploy-placeholders.ps1 -Repository 'ranjivs64/Q
 ```
 
 This script creates the `dev`, `staging`, and `prod` GitHub environments if needed, then adds a placeholder `AZURE_CREDENTIALS` secret to each one.
+
+If you use repository-level configuration, you do not need GitHub Actions environments for deployment authentication.
 
 ### What you do not need to preconfigure
 
