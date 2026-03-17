@@ -5,11 +5,11 @@ on:
     inputs:
       subscription_id:
         description: Azure subscription ID
-        required: true
+        required: false
         type: string
       resource_group:
         description: Azure resource group name
-        required: true
+        required: false
         type: string
       environment:
         description: Deployment environment
@@ -23,14 +23,15 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
-  group: deploy-${{ inputs.environment }}-${{ inputs.resource_group }}
+  group: deploy-${{ inputs.environment }}-${{ inputs.resource_group || vars.AZURE_RESOURCE_GROUP || vars.RESOURCE_GROUP || 'unset-rg' }}
   cancel-in-progress: false
 
 env:
   PROJECT_NAME: qualsdemo
-  DEFAULT_AZURE_LOCATION: uksouth
+  DEFAULT_AZURE_LOCATION: centralus
 
 jobs:
   prepare:
@@ -48,14 +49,37 @@ jobs:
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_RESOURCE_GROUP: ${{ inputs.resource_group }}
           INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription_id }}
+          DEFAULT_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          LEGACY_RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          DEFAULT_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
           deploy_environment="$INPUT_ENVIRONMENT"
+          resource_group="$INPUT_RESOURCE_GROUP"
+          subscription_id="$INPUT_SUBSCRIPTION_ID"
+
+          if [ -z "$resource_group" ]; then
+            resource_group="${DEFAULT_RESOURCE_GROUP:-$LEGACY_RESOURCE_GROUP}"
+          fi
+
+          if [ -z "$subscription_id" ]; then
+            subscription_id="$DEFAULT_SUBSCRIPTION_ID"
+          fi
+
+          if [ -z "$resource_group" ]; then
+            echo "Missing deployment resource group. Provide the workflow input or set GitHub variable AZURE_RESOURCE_GROUP or RESOURCE_GROUP." >&2
+            exit 1
+          fi
+
+          if [ -z "$subscription_id" ]; then
+            echo "Missing deployment subscription ID. Provide the workflow input or set GitHub variable AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
 
           location="$DEFAULT_AZURE_LOCATION"
 
           echo "deploy_environment=$deploy_environment" >> "$GITHUB_OUTPUT"
-          echo "resource_group=$INPUT_RESOURCE_GROUP" >> "$GITHUB_OUTPUT"
-          echo "subscription_id=$INPUT_SUBSCRIPTION_ID" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$resource_group" >> "$GITHUB_OUTPUT"
+          echo "subscription_id=$subscription_id" >> "$GITHUB_OUTPUT"
           echo "location=$location" >> "$GITHUB_OUTPUT"
           echo "parameter_file=infra/environments/$deploy_environment.bicepparam" >> "$GITHUB_OUTPUT"
 
@@ -64,6 +88,10 @@ jobs:
     needs: prepare
     timeout-minutes: 30
     environment: ${{ needs.prepare.outputs.deploy_environment }}
+    env:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
     outputs:
       web_app_name: ${{ steps.capture.outputs.web_app_name }}
       web_app_host_name: ${{ steps.capture.outputs.web_app_host_name }}
@@ -74,10 +102,9 @@ jobs:
 
       - name: Validate deployment configuration
         env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           AZURE_SUBSCRIPTION_ID: ${{ needs.prepare.outputs.subscription_id }}
         run: |
-          required=(AZURE_CREDENTIALS AZURE_SUBSCRIPTION_ID)
+          required=(AZURE_SUBSCRIPTION_ID)
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
               echo "Missing required GitHub environment value: $name" >&2
@@ -85,30 +112,38 @@ jobs:
             fi
           done
 
-          client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
-          client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
-          tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+          if [ -n "$AZURE_CREDENTIALS" ]; then
+            client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
+            client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
+            tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
 
-          if [ -z "$client_id" ] || [ -z "$client_secret" ] || [ -z "$tenant_id" ]; then
-            echo "AZURE_CREDENTIALS must be a JSON object containing clientId, clientSecret, and tenantId." >&2
+            if [ -z "$client_id" ] || [ -z "$client_secret" ] || [ -z "$tenant_id" ]; then
+              echo "AZURE_CREDENTIALS must be a JSON object containing clientId, clientSecret, and tenantId." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
+            echo "Provide either AZURE_CREDENTIALS or OIDC variables AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
             exit 1
           fi
 
-      - name: Azure CLI login
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          AZURE_SUBSCRIPTION_ID: ${{ needs.prepare.outputs.subscription_id }}
-        run: |
-          client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
-          client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
-          tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+      - name: Azure login with secret credentials
+        if: env.AZURE_CREDENTIALS != ''
+        uses: Azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: false
 
-          az login \
-            --service-principal \
-            --username "$client_id" \
-            --password "$client_secret" \
-            --tenant "$tenant_id"
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      - name: Azure login with OIDC
+        if: env.AZURE_CREDENTIALS == ''
+        uses: Azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ needs.prepare.outputs.subscription_id }}
+          enable-AzPSSession: false
 
       - name: Ensure resource group exists
         run: |
@@ -175,25 +210,29 @@ jobs:
       - infra
     timeout-minutes: 30
     environment: ${{ needs.prepare.outputs.deploy_environment }}
+    env:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Azure CLI login
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          AZURE_SUBSCRIPTION_ID: ${{ needs.prepare.outputs.subscription_id }}
-        run: |
-          client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
-          client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
-          tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+      - name: Azure login with secret credentials
+        if: env.AZURE_CREDENTIALS != ''
+        uses: Azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: false
 
-          az login \
-            --service-principal \
-            --username "$client_id" \
-            --password "$client_secret" \
-            --tenant "$tenant_id"
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      - name: Azure login with OIDC
+        if: env.AZURE_CREDENTIALS == ''
+        uses: Azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ needs.prepare.outputs.subscription_id }}
+          enable-AzPSSession: false
 
       - name: Package application
         run: |
