@@ -255,8 +255,8 @@ The expected `AZURE_CREDENTIALS` JSON shape is:
 {
   "clientId": "<azure-client-id>",
   "clientSecret": "<azure-client-secret>",
-  "tenantId": "<azure-tenant-id>",
-  "subscriptionId": "<azure-subscription-id>"
+   "tenantId": "<azure-tenant-id>",
+   "subscriptionId": "<azure-subscription-id>"
 }
 ```
 

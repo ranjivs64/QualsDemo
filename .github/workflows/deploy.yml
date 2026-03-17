@@ -106,7 +106,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ env.DEPLOY_SUBSCRIPTION_ID }}
           AZURE_RESOURCE_GROUP: ${{ env.DEPLOY_RESOURCE_GROUP }}
         run: |
-          required=(AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP)
+          required=(AZURE_RESOURCE_GROUP)
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
               echo "Missing required repository configuration value: $name" >&2
@@ -118,9 +118,10 @@ jobs:
             client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
             client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
             tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+            subscription_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.subscriptionId // empty')
 
-            if [ -z "$client_id" ] || [ -z "$client_secret" ] || [ -z "$tenant_id" ]; then
-              echo "AZURE_CREDENTIALS must be a JSON object containing clientId, clientSecret, and tenantId." >&2
+            if [ -z "$client_id" ] || [ -z "$client_secret" ] || [ -z "$tenant_id" ] || [ -z "$subscription_id" ]; then
+              echo "AZURE_CREDENTIALS must be a JSON object containing clientId, clientSecret, tenantId, and subscriptionId." >&2
               exit 1
             fi
             exit 0
@@ -136,6 +137,11 @@ jobs:
 
           if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
             echo "Provide either repository secret AZURE_CREDENTIALS, repository secret AZURE_CLIENT_SECRET with AZURE_CLIENT_ID and AZURE_TENANT_ID, or repository-level OIDC settings AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
+            exit 1
+          fi
+
+          if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "Missing required repository configuration value: AZURE_SUBSCRIPTION_ID" >&2
             exit 1
           fi
 
