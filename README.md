@@ -228,7 +228,7 @@ This repository supports both secret-based login and GitHub OIDC. OIDC is the be
 
 Use either:
 
-- GitHub OIDC with `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` environment variables, plus either the workflow `subscription_id` input or the GitHub variable `AZURE_SUBSCRIPTION_ID`
+- GitHub OIDC with `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` stored as GitHub variables or GitHub secrets, plus either the workflow `subscription_id` input or the GitHub variable `AZURE_SUBSCRIPTION_ID`
 - one GitHub secret named `AZURE_CREDENTIALS` containing the Azure service principal JSON payload
 
 Step by step:
@@ -237,7 +237,7 @@ Step by step:
 2. If using OIDC, add a federated credential that trusts this GitHub repository and environment.
 3. In GitHub, create the deployment environments you want to use: `dev`, `staging`, and `prod`.
 4. In each GitHub environment, add either:
-   - OIDC variables `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, or
+   - OIDC variables or secrets `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, or
    - one secret named `AZURE_CREDENTIALS`
 5. Ensure the target Azure resource group already exists.
 6. Run the workflow and either:
@@ -258,10 +258,10 @@ The expected `AZURE_CREDENTIALS` JSON shape is:
 
 The workflow prefers runtime inputs when provided, otherwise it falls back to GitHub variables for subscription and resource group. The subscription ID inside `AZURE_CREDENTIALS` remains informational for this repo's current flow.
 
-If you use GitHub OIDC instead of `AZURE_CREDENTIALS`, configure:
+If you use GitHub OIDC instead of `AZURE_CREDENTIALS`, configure either GitHub environment variables or GitHub environment secrets for:
 
-- GitHub environment variable `AZURE_CLIENT_ID`
-- GitHub environment variable `AZURE_TENANT_ID`
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
 
 You do not need `AZURE_CLIENT_SECRET` for OIDC.
 
