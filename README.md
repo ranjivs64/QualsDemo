@@ -205,33 +205,46 @@ Do not scale this implementation out to multiple instances while it still uses S
 
 ### Manual inputs at deployment time
 
-When you run the deploy workflow, you only provide:
+After the one-time GitHub and Azure trust setup is done, the operator only provides:
 
 1. Azure subscription ID
 2. Azure resource group name
 3. Deployment environment: `dev`, `staging`, or `prod`
 
+In workflow terms, those are the runtime values for `subscription_id` and `resource_group`, plus the environment selector.
+
 Everything else is provisioned and wired automatically by the workflow and Bicep template.
 
-### One-time GitHub setup
+### One-time GitHub and Azure setup
 
-Before the workflow can run, configure a service principal with deployment rights to the target subscription and resource group, then store these values in each GitHub deployment environment (`dev`, `staging`, `prod`):
+This repository now supports the simpler single-secret authentication path.
 
-- Environment variable `AZURE_CLIENT_ID`
-- Environment variable `AZURE_TENANT_ID`
-- Environment secret `AZURE_CLIENT_SECRET`
+Use one GitHub secret named `AZURE_CREDENTIALS` that contains the Azure service principal JSON payload, then provide only subscription ID and resource group when you run the workflow.
 
-The target Azure resource group must already exist.
+Step by step:
 
-You no longer need to preconfigure:
+1. Create an Azure service principal with deployment rights to the target subscription or resource group.
+2. Export its credentials as the standard Azure JSON payload used by GitHub Actions.
+3. In GitHub, create the deployment environments you want to use: `dev`, `staging`, and `prod`.
+4. In each GitHub environment, add one secret named `AZURE_CREDENTIALS`.
+5. Ensure the target Azure resource group already exists.
+6. Run the workflow and provide only:
+   - Azure subscription ID
+   - Azure resource group name
+   - deployment environment
 
-- `AZURE_SUBSCRIPTION_ID` as a repository variable
-- `FOUNDRY_ENDPOINT`
-- `FOUNDRY_API_VERSION`
-- `FOUNDRY_MODEL`
-- `FOUNDRY_API_KEY`
+The expected `AZURE_CREDENTIALS` JSON shape is:
 
-Those AI settings are now created and populated by the deployment flow.
+```json
+{
+  "clientId": "<azure-client-id>",
+  "clientSecret": "<azure-client-secret>",
+  "tenantId": "<azure-tenant-id>",
+  "subscriptionId": "<azure-subscription-id>"
+}
+```
+
+The workflow uses the runtime `subscription_id` input when deploying, so the subscription ID in the JSON payload is informational for this repo's current flow.
 
 If you want to create placeholder entries first and replace them later, run:
 
@@ -239,7 +252,20 @@ If you want to create placeholder entries first and replace them later, run:
 pwsh ./scripts/bootstrap-github-deploy-placeholders.ps1 -Repository 'ranjivs64/QualsDemo'
 ```
 
-This script creates the `dev`, `staging`, and `prod` GitHub environments if needed, then adds placeholder values for the required variables and secret.
+This script creates the `dev`, `staging`, and `prod` GitHub environments if needed, then adds a placeholder `AZURE_CREDENTIALS` secret to each one.
+
+### What you do not need to preconfigure
+
+You do not need to preconfigure any AI-specific runtime settings in GitHub.
+
+These values are created and populated by the deployment flow:
+
+- `FOUNDRY_ENDPOINT`
+- `FOUNDRY_API_VERSION`
+- `FOUNDRY_MODEL`
+- `FOUNDRY_API_KEY`
+
+You also do not need to store `AZURE_SUBSCRIPTION_ID` as a GitHub variable because the workflow accepts the subscription ID as a runtime input.
 
 ### How to run the deployment
 
