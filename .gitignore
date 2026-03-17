@@ -5,3 +5,5 @@ server/data/*.sqlite-wal
 server/uploads/
 server/store.json
 .env
+
+
