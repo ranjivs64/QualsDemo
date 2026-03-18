@@ -182,8 +182,16 @@ jobs:
             state=$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo "NotRegistered")
 
             if [ "$state" != "Registered" ]; then
-              az provider register --namespace "$provider"
-              az provider wait --namespace "$provider" --registered
+              if ! register_output=$(az provider register --namespace "$provider" 2>&1); then
+                echo "$register_output" >&2
+                echo "Unable to register Azure resource provider $provider. Register it once at the subscription level with an Owner or Contributor plus /register/action permission, then rerun this workflow." >&2
+                exit 1
+              fi
+
+              if ! az provider wait --namespace "$provider" --registered; then
+                echo "Azure resource provider $provider did not reach Registered state in time. Confirm subscription-level registration, then rerun this workflow." >&2
+                exit 1
+              fi
             fi
           done
 
