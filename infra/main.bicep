@@ -84,6 +84,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   location: location
   tags: commonTags
   properties: {
+    accessPolicies: []
     tenantId: tenant().tenantId
     enableRbacAuthorization: false
     enabledForDeployment: false
@@ -210,11 +211,8 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 }
 
 resource keyVaultWebAppAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
-  name: '${keyVault.name}/add'
-  dependsOn: [
-    keyVault
-    webApp
-  ]
+  parent: keyVault
+  name: 'add'
   properties: {
     accessPolicies: [
       {
