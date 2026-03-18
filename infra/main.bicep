@@ -210,8 +210,11 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 }
 
 resource keyVaultWebAppAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
-  parent: keyVault
-  name: 'add'
+  name: '${keyVault.name}/add'
+  dependsOn: [
+    keyVault
+    webApp
+  ]
   properties: {
     accessPolicies: [
       {
