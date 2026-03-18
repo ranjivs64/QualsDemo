@@ -85,7 +85,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   tags: commonTags
   properties: {
     tenantId: tenant().tenantId
-    enableRbacAuthorization: true
+    enableRbacAuthorization: false
     enabledForDeployment: false
     enabledForDiskEncryption: false
     enabledForTemplateDeployment: false
@@ -209,13 +209,21 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-resource keyVaultSecretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, webApp.name, 'KeyVaultSecretsUser')
-  scope: keyVault
+resource keyVaultWebAppAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
+  parent: keyVault
+  name: 'add'
   properties: {
-    principalId: webApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    accessPolicies: [
+      {
+        tenantId: tenant().tenantId
+        objectId: webApp.identity.principalId
+        permissions: {
+          secrets: [
+            'get'
+          ]
+        }
+      }
+    ]
   }
 }
 
