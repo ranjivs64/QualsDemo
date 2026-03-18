@@ -1,15 +1,17 @@
 # Solution Review -- QualExtract MVP
-**Date**: 2026-03-17
-**Scope**: Full solution audit (server, infra, CI/CD, tests, config)
+**Date**: 2026-03-17 (v2 -- updated after re-review)
+**Scope**: Full solution audit (server, infra, CI/CD, tests, config, workspace state)
 **Status**: CHANGES REQUESTED
+**Tests**: 16/16 PASS
 
 ---
 
-## Auto-Applied Fixes
+## Auto-Applied Fixes (this review pass)
 
-| # | File | Change | Verified |
+| # | File | Change | Verdict |
 |---|------|--------|---------|
-| 1 | `.env.example` | `QUAL_AI_MODEL` corrected from `gpt-5.1-2026-01-15` to `gpt-4o-mini` to match Bicep deployment | [PASS] |
+| 1 | `.env.example` | `QUAL_AI_MODEL` corrected from `gpt-5.1-2026-01-15` to `gpt-4o-mini` (matches Bicep) | [PASS] committed |
+| 2 | `.gitignore` | Removed AgentX-generated block that contained `.github/workflows/` -- new CI files would have been silently untracked | [PASS] committed (bcbe1a9) |
 
 ---
 
@@ -19,35 +21,68 @@
 
 **File**: `server.js` -- all `handleApi` routes
 
-Every API endpoint is fully public. Any person or bot that reaches the server URL can:
-- List, read, and download all extraction jobs and persisted qualifications (`GET /api/v1/jobs`, `GET /api/v1/qualifications`)
-- Upload PDFs and trigger AI extraction
-- Modify node fields, verify nodes, and approve jobs (which writes to the database)
-- Access the destructive reset endpoint (see below)
+Every API endpoint is fully public. Any reachable caller can:
+- List and download all extraction jobs and persisted qualifications
+- Upload PDFs and trigger AI extraction (costing Azure OpenAI quota)
+- Modify node fields, verify nodes, and approve jobs (database writes)
+- Trigger the destructive reset (see next finding)
 
-**Recommendation**: Add at minimum a static bearer-token check (env var) for all `/api/v1/` routes before deployment to a shared environment. For production, use Azure AD / Entra ID authentication via App Service built-in auth (`easyAuth`) -- zero code change, configured in the App Service resource.
+**Recommendation**: At minimum, static bearer-token check (`Authorization: Bearer <env var>`) for all `/api/v1/` routes. For production, use Azure App Service Easy Auth (Entra ID) -- zero application code change, configured in Bicep on the `webApp` resource.
 
 ---
 
 ### [HIGH] Unprotected Destructive Reset Endpoint
 
-**File**: `server.js` line ~`POST /api/v1/reset`
+**File**: `server.js` -- `POST /api/v1/reset`
 
-`POST /api/v1/reset` wipes all jobs and qualification records. There is no token, role check, or confirmation required. In production this is a data loss risk.
+Wipes all jobs and qualification records with no token, role check, or confirmation. In any shared environment this is a data loss risk.
 
-**Recommendation**: Remove from production builds entirely, or gate it behind an admin token (`Authorization: Bearer <QUAL_ADMIN_TOKEN>`). Add `NODE_ENV !== 'production'` guard at minimum.
+**Recommendation**: Remove from production or gate behind an admin token. At minimum:
+```js
+if (process.env.NODE_ENV === 'production') {
+  sendProblem(res, 404, 'Not Found', 'API endpoint was not found.');
+  return;
+}
+```
 
 ---
 
 ### [HIGH] No Rate Limiting
 
-**File**: `server.js` -- upload endpoint
+**File**: `server.js` -- upload handler
 
-`POST /api/v1/jobs/upload` accepts binary PDFs up to 50 MB each with no rate limiting. A caller can flood the server to:
+`POST /api/v1/jobs/upload` accepts 50 MB PDFs with no per-IP or global rate limit. A caller can:
 1. Exhaust disk space (uploads directory has no total-size cap)
-2. Exhaust the Azure OpenAI token quota (each upload triggers an AI extraction job)
+2. Burn Azure OpenAI token quota (each upload triggers an extraction job)
 
-**Recommendation**: Add per-IP or global rate limiting. A simple token-bucket counter in-process is sufficient for single-instance MVP. npm packages `express-rate-limit` or a lightweight in-process implementation both work.
+**Recommendation**: Add a simple in-process token-bucket limiter on the upload endpoint. For the Azure App Service path, App Service Front Door or API Management can handle this without code changes.
+
+---
+
+### [HIGH -- FIXED] `.gitignore` Excluded CI/CD Workflows
+
+**Status**: Fixed in commit `bcbe1a9`
+
+AgentX re-initialization added a block to `.gitignore` that contained `.github/workflows/`. The two app workflows (`ci.yml`, `deploy.yml`) were already tracked and unaffected, but any new or renamed workflow file would have been silently untracked. Fixed by removing the entire AgentX block.
+
+---
+
+### [MEDIUM] Untracked AgentX Re-Init Files Need Resolution
+
+**Status**: Workspace has ~20 untracked files from a partial AgentX re-initialization.
+
+Files present but uncommitted:
+- `.agentx/` -- AgentX CLI runtime
+- `.github/CODEOWNERS`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/agent-delegation.md`, `.github/agentx-security.yml`
+- `.github/hooks/` -- pre-commit hook (already active)
+- `.github/ISSUE_TEMPLATE/`
+- 11 additional AgentX workflow files in `.github/workflows/`
+- `AGENTS.md`, `Skills.md` at workspace root
+- `docs/GUIDE.md`, `docs/WORKFLOW.md`
+
+**Note**: The pre-commit hook from `.github/hooks/` is already active and enforcing issue-reference validation on commits, which is affecting the current development workflow.
+
+**Decision required**: Either commit these as an intentional AgentX setup (and update the README to document the workflow tooling), or clean them up with `Remove-Item .agentx, AGENTS.md, Skills.md, docs/GUIDE.md, docs/WORKFLOW.md, .github/CODEOWNERS, .github/PULL_REQUEST_TEMPLATE.md, .github/agent-delegation.md, .github/agentx-security.yml -Recurse -Force` and `Remove-Item .github/hooks, .github/ISSUE_TEMPLATE, .github/workflows/agent-*.yml, .github/workflows/auto-release.yml, .github/workflows/copilot-setup-steps.yml, .github/workflows/dependency-scanning.yml, .github/workflows/issue-closeout-audit.yml, .github/workflows/issue-triage.yml, .github/workflows/publish-marketplace.yml, .github/workflows/quality-gates.yml, .github/workflows/scorecard.yml, .github/workflows/skill-factory.yml, .github/workflows/weekly-status.yml -Recurse -Force` then uninstall the git hook with `Remove-Item .git/hooks/pre-commit`.
 
 ---
 
@@ -55,31 +90,28 @@ Every API endpoint is fully public. Any person or bot that reaches the server UR
 
 **File**: `server.js` -- `handleApi()` first line
 
+Synchronous directory read + file stat/unlink on every incoming request, including lightweight reads like `GET /api/v1/health`. Adds unnecessary I/O overhead at scale.
+
+**Recommendation**:
 ```js
-async function handleApi(req, res, pathname, searchParams) {
-  cleanupExpiredArtifacts();  // <-- runs synchronously on EVERY request
+// At server startup:
+setInterval(cleanupExpiredArtifacts, 10 * 60 * 1000); // every 10 min
+// Remove the call from handleApi()
 ```
-
-This performs a directory read and file stat/unlink on every request, including lightweight reads like `GET /api/v1/health`. On a busy server, this adds synchronous I/O overhead to every call.
-
-**Recommendation**: Move to a `setInterval` scheduled every 5-10 minutes at server startup instead of per-request.
 
 ---
 
-### [MEDIUM] App Insights Provisioned but Traces Never Reach It
+### [MEDIUM] App Insights Provisioned but No Exporter Wired
 
 **File**: `server/observability.js`
 
-The Bicep provisions App Insights and sets `APPLICATIONINSIGHTS_CONNECTION_STRING` as an app setting. But `observability.js` creates a bare `NodeTracerProvider` with no exporter attached:
-
+Bicep provisions App Insights and injects `APPLICATIONINSIGHTS_CONNECTION_STRING`, but the tracer has no exporter:
 ```js
 const provider = new NodeTracerProvider();
-provider.register();  // no exporter -- traces are dropped
+provider.register(); // no exporter -- all spans discarded silently
 ```
 
-The `@azure/monitor-opentelemetry` package (or `applicationinsights` SDK) is not a dependency. All OTel spans are silently discarded.
-
-**Recommendation**: Add `@azure/monitor-opentelemetry` to `package.json` and call `useAzureMonitor()` in `observability.js`. This auto-connects to App Insights via the env var already set by the pipeline.
+**Recommendation**: Add `@azure/monitor-opentelemetry` to `package.json` and call `useAzureMonitor()` before the provider registration. The connection string is already wired by the pipeline.
 
 ---
 
@@ -87,36 +119,31 @@ The `@azure/monitor-opentelemetry` package (or `applicationinsights` SDK) is not
 
 **File**: `tests/` directory
 
-Current test suite covers:
-- `aiClient.js`: provider config logic
-- `jobStore.js` + `extractionService.js`: job lifecycle and text parsing
+The 16 tests cover AI client config, job lifecycle, and text extraction. Not covered:
+- `server.js` routing, multipart parsing, error handling (400/404/409/413/422/500)
+- Path traversal protection (`serveStaticFile`)
+- Upload -> approve workflow end-to-end via HTTP
+- `uploadStore.js` file lifecycle and path traversal guard
 
-Not covered:
-- `server.js` routing, middleware, multipart parsing, error handling
-- Path traversal protection in `serveStaticFile`
-- The approval/verify/reprocess API flows end-to-end
-- HTTP error responses (400, 404, 409, 413, 422, 500)
-- `uploadStore.js` file lifecycle
-
-**Recommendation**: Add a test file `tests/server.test.js` that starts the HTTP server on a random port and exercises the API surface via `node:http` requests.
+**Recommendation**: Add `tests/server.test.js` that starts the HTTP server on a random port and exercises the API surface with native `node:http`.
 
 ---
 
-### [MEDIUM] AI Client Timeout is 15 Seconds
+### [MEDIUM] AI Client Timeout Too Short for Extraction
 
-**File**: `server/aiClient.js` `getClient()`
+**File**: `server/aiClient.js` -- `getClient()`
 
 ```js
-timeout: 15000
+timeout: 15000 // 15 seconds
 ```
 
-The extraction prompt sends up to 20,000 characters of PDF text and expects a structured JSON response. Typical Azure OpenAI response time for a dense qualification spec is 20-40 seconds. A 15-second timeout will cause false failures on complex documents.
+The extraction call sends up to 20,000 characters and waits for a full structured JSON response. Azure OpenAI p95 latency for this workload exceeds 15 seconds on complex documents, causing false timeout failures.
 
-**Recommendation**: Increase to `60000` (60s) for the extraction client. The connectivity check can keep its shorter timeout by using a separate client instance.
+**Recommendation**: Set `timeout: 60000` for the extraction client. The connectivity check call uses `max_tokens: 8` and can keep a shorter timeout by using a separate lightweight client instance.
 
 ---
 
-### [MEDIUM] Model/Version Availability Risk in `uksouth`
+### [MEDIUM] Model Version Availability Risk in `uksouth`
 
 **File**: `infra/main.bicep`
 
@@ -125,19 +152,19 @@ param foundryModel string = 'gpt-4o-mini'
 param foundryModelVersion string = '2024-07-18'
 ```
 
-Model version `2024-07-18` for `gpt-4o-mini` may not be available in `uksouth`. Azure OpenAI model availability is region-specific and version-specific. An unavailable combination will cause `az deployment group create` to fail silently on the OpenAI deployment resource.
+Model version `2024-07-18` for `gpt-4o-mini` is not guaranteed available in `uksouth`. An unavailable version causes the `openAiDeployment` resource to fail during Bicep deployment.
 
-**Recommendation**: Either pin to a version known available in `uksouth` (verify via Azure portal or `az cognitiveservices account list-models`), or set `versionUpgradeOption: 'OnceCurrentVersionExpired'` and leave the version field empty to let Azure pick the latest available.
+**Recommendation**: Verify availability with `az cognitiveservices account list-models --location uksouth --query "[?name=='gpt-4o-mini'].{version:version}" -o table`, or remove `foundryModelVersion` and let Azure select the default available version.
 
 ---
 
-### [MEDIUM] SQLite `DatabaseSync` Blocks the Event Loop
+### [MEDIUM] SQLite `DatabaseSync` Blocks the Event Loop on Every DB Call
 
 **File**: `server/database.js`
 
-Node.js `node:sqlite` `DatabaseSync` API is fully synchronous. Every `db.prepare(...).run()` or `.get()` call blocks the event loop. For an MVP with a single user, this is fine. At higher concurrency, long-running queries (e.g., `persistApprovedQualification` with multiple inserts) will freeze the server for all other requests for the duration.
+`node:sqlite` `DatabaseSync` is fully synchronous. All `prepare().run()` and `.get()` calls block the event loop. For a single-user MVP this is acceptable; at any concurrent load, multi-insert operations like `persistApprovedQualification` will stall all other requests.
 
-**Recommendation**: Document the single-instance constraint explicitly in the README. For a production path, migrate to `better-sqlite3` async wrappers or a proper async database (PostgreSQL).
+**Recommendation**: Document the single-instance constraint in the README. Production path should migrate to async SQLite (`better-sqlite3` with worker threads) or PostgreSQL.
 
 ---
 
@@ -145,60 +172,51 @@ Node.js `node:sqlite` `DatabaseSync` API is fully synchronous. Every `db.prepare
 
 **File**: `server.js` -- `sendJson()` and `serveStaticFile()`
 
-The server already sets `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`, but does not set `Content-Security-Policy`. Without CSP, a reflected or stored XSS vulnerability in the frontend would have no browser-level mitigation.
+`X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` are set, but `Content-Security-Policy` is absent. XSS in the frontend has no browser-level mitigation.
 
 **Recommendation**: Add to all responses:
 ```
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'
 ```
-Verify this does not break the frontend before deploying.
 
 ---
 
-### [LOW] `Content-Disposition` Filename Incomplete Sanitization
+### [LOW] `Content-Disposition` Filename Allows Header Injection
 
-**File**: `server.js` artifact download handler
+**File**: `server.js` -- artifact download route
 
 ```js
 const safeFileName = String(job.artifact.originalFileName || "").replace(/["\r\n]/g, "");
 ```
 
-Semicolons and other special characters are not stripped. A crafted filename like `file.pdf; name=evil` could inject extra `Content-Disposition` parameters in some HTTP clients.
+Semicolons are not stripped. A crafted filename like `file.pdf; filename=evil.exe` injects extra `Content-Disposition` parameters in some clients.
 
-**Recommendation**: Use RFC 5987 encoding or simply use `sanitizeFileName()` from `uploadStore.js` (which already produces a safe name) instead of the raw `originalFileName` here.
+**Recommendation**: Reuse `sanitizeFileName()` from `uploadStore.js` instead of the raw `originalFileName`.
 
 ---
 
 ### [LOW] `uploadStore.js` Has No Test Coverage
 
-**File**: `server/uploadStore.js`
+Security-relevant functions (`resolveArtifactPath` path-traversal guard, `sanitizeFileName`, `cleanupExpiredArtifacts`) have no direct tests.
 
-The artifact save, path resolution, and expiry cleanup functions are not tested. The path traversal guard in `resolveArtifactPath` is a security-relevant function that should have direct tests.
-
-**Recommendation**: Add tests covering save + resolve round-trip, `sanitizeFileName` edge cases (path traversal attempts, null bytes), expiry cleanup.
+**Recommendation**: Add `tests/uploadStore.test.js` covering: save + resolve round-trip, `sanitizeFileName` with path-traversal inputs (`../../../etc/passwd`, null bytes), expiry cleanup.
 
 ---
 
-### [LOW] Uncommitted `.gitignore` Change
+## Summary
 
-**Status**: One modified file in working tree (`M .gitignore` -- AgentX block removal)
-
-**Recommendation**: Commit: `git add .gitignore && git commit -m "chore: remove agentx gitignore block"`
-
----
-
-## Summary Table
-
-| Severity | Count | Items |
-|----------|-------|-------|
-| HIGH | 3 | No auth, unprotected reset, no rate limiting |
-| MEDIUM | 5 | Cleanup on every request, no App Insights export, no HTTP tests, 15s AI timeout, model version risk |
-| LOW | 4 | No CSP, Content-Disposition, uploadStore tests, uncommitted .gitignore |
+| Severity | Count | Status |
+|----------|-------|--------|
+| HIGH | 3 remaining (1 fixed) | Auth, reset, rate limiting -- UNRESOLVED |
+| MEDIUM | 6 | Cleanup cadence, App Insights, HTTP tests, AI timeout, model version, SQLite blocking |
+| LOW | 3 | CSP header, Content-Disposition, uploadStore tests |
 
 ---
 
 ## Decision: CHANGES REQUESTED
 
-HIGH findings (auth, reset, rate limiting) must be resolved before production deployment. MEDIUM findings should be addressed in the next iteration. LOW findings are tracked for future cleanup.
+**Blockers for production deployment**: The 3 HIGH findings (authentication, unprotected reset, rate limiting) must be resolved first.
 
-The codebase is structurally well-organized with good separation of concerns, solid input validation on the upload path, path traversal protection, and a working fallback extraction path when AI is unavailable. The CI/CD pipeline and Bicep are sound and require no structural changes.
+**Workspace hygiene (required before next commit)**: Decide on AgentX untracked files -- either commit them or clean them up. The active pre-commit hook will continue to require issue references on all commits until the hook is removed or the enforcement flag is toggled off.
+
+**What is solid**: Test coverage for core logic is good (16/16). Input validation on uploads, path traversal protection, graceful AI fallback, Bicep/CI-CD pipeline structure, and security headers (minus CSP) are all well-implemented.
