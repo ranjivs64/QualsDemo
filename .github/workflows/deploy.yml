@@ -182,7 +182,7 @@ jobs:
           az deployment group what-if \
             --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --template-file infra/main.bicep \
-            --parameters @"${{ needs.prepare.outputs.parameter_file }}"
+            --parameters "${{ needs.prepare.outputs.parameter_file }}"
 
       - name: Deploy infrastructure
         run: |
@@ -190,7 +190,7 @@ jobs:
             --name "deploy-${{ github.run_id }}" \
             --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --template-file infra/main.bicep \
-            --parameters @"${{ needs.prepare.outputs.parameter_file }}"
+            --parameters "${{ needs.prepare.outputs.parameter_file }}"
 
       - name: Capture infrastructure outputs
         id: capture
