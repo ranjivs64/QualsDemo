@@ -130,6 +130,14 @@ resource openAiDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024
   }
 }
 
+resource foundryApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: foundryApiKeySecretName
+  properties: {
+    value: listKeys(openAiAccount.id, openAiAccount.apiVersion).key1
+  }
+}
+
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: appServicePlanName
   location: location
@@ -208,6 +216,9 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       ]
     }
   }
+  dependsOn: [
+    foundryApiKeySecret
+  ]
 }
 
 resource keyVaultWebAppAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
