@@ -32,7 +32,7 @@ param foundryModel string = 'gpt-4o-mini'
 param foundryModelVersion string = '2024-07-18'
 
 @description('Azure OpenAI deployment SKU name.')
-param aiDeploymentSkuName string = 'Standard'
+param aiDeploymentSkuName string = 'GlobalStandard'
 
 @description('Azure OpenAI deployment capacity.')
 @minValue(1)
