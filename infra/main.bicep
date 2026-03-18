@@ -210,7 +210,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 }
 
 resource keyVaultSecretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, webApp.identity.principalId, 'KeyVaultSecretsUser')
+  name: guid(keyVault.id, webApp.name, 'KeyVaultSecretsUser')
   scope: keyVault
   properties: {
     principalId: webApp.identity.principalId
