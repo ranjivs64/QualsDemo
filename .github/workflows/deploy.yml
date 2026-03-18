@@ -5,11 +5,11 @@ on:
     inputs:
       subscription_id:
         description: Azure subscription ID
-        required: true
+        required: false
         type: string
       resource_group:
         description: Azure resource group name
-        required: true
+        required: false
         type: string
       environment:
         description: Deployment environment
@@ -23,22 +23,20 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
-  group: deploy-${{ inputs.environment }}-${{ inputs.resource_group }}
+  group: deploy-${{ inputs.environment }}-${{ inputs.resource_group || vars.AZURE_RESOURCE_GROUP || vars.RESOURCE_GROUP || 'unset-rg' }}
   cancel-in-progress: false
 
 env:
   PROJECT_NAME: qualsdemo
-  DEFAULT_AZURE_LOCATION: uksouth
+  DEFAULT_AZURE_LOCATION: centralus
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      deploy_environment: ${{ steps.prepare.outputs.deploy_environment }}
-      resource_group: ${{ steps.prepare.outputs.resource_group }}
-      subscription_id: ${{ steps.prepare.outputs.subscription_id }}
       location: ${{ steps.prepare.outputs.location }}
       parameter_file: ${{ steps.prepare.outputs.parameter_file }}
     steps:
@@ -48,14 +46,39 @@ jobs:
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_RESOURCE_GROUP: ${{ inputs.resource_group }}
           INPUT_SUBSCRIPTION_ID: ${{ inputs.subscription_id }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          DEFAULT_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || secrets.AZURE_RESOURCE_GROUP }}
+          LEGACY_RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP || secrets.RESOURCE_GROUP }}
+          DEFAULT_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           deploy_environment="$INPUT_ENVIRONMENT"
+          resource_group="$INPUT_RESOURCE_GROUP"
+          subscription_id="$INPUT_SUBSCRIPTION_ID"
+
+          if [ -z "$resource_group" ]; then
+            resource_group="${DEFAULT_RESOURCE_GROUP:-$LEGACY_RESOURCE_GROUP}"
+          fi
+
+          if [ -z "$subscription_id" ]; then
+            subscription_id="$DEFAULT_SUBSCRIPTION_ID"
+          fi
+
+          if [ -z "$subscription_id" ] && [ -n "$AZURE_CREDENTIALS" ]; then
+            subscription_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.subscriptionId // empty')
+          fi
+
+          if [ -z "$resource_group" ]; then
+            echo "Missing deployment resource group. Provide the workflow input or set repository variable AZURE_RESOURCE_GROUP or RESOURCE_GROUP." >&2
+            exit 1
+          fi
+
+          if [ -z "$subscription_id" ]; then
+            echo "Missing deployment subscription ID. Provide the workflow input or set repository variable AZURE_SUBSCRIPTION_ID." >&2
+            exit 1
+          fi
 
           location="$DEFAULT_AZURE_LOCATION"
 
-          echo "deploy_environment=$deploy_environment" >> "$GITHUB_OUTPUT"
-          echo "resource_group=$INPUT_RESOURCE_GROUP" >> "$GITHUB_OUTPUT"
-          echo "subscription_id=$INPUT_SUBSCRIPTION_ID" >> "$GITHUB_OUTPUT"
           echo "location=$location" >> "$GITHUB_OUTPUT"
           echo "parameter_file=infra/environments/$deploy_environment.bicepparam" >> "$GITHUB_OUTPUT"
 
@@ -63,58 +86,124 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare
     timeout-minutes: 30
-    environment: ${{ needs.prepare.outputs.deploy_environment }}
+    env:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+      DEPLOY_RESOURCE_GROUP: ${{ inputs.resource_group || vars.AZURE_RESOURCE_GROUP || secrets.AZURE_RESOURCE_GROUP || vars.RESOURCE_GROUP || secrets.RESOURCE_GROUP }}
+      DEPLOY_SUBSCRIPTION_ID: ${{ inputs.subscription_id || vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID || fromJson(secrets.AZURE_CREDENTIALS).subscriptionId }}
     outputs:
       web_app_name: ${{ steps.capture.outputs.web_app_name }}
       web_app_host_name: ${{ steps.capture.outputs.web_app_host_name }}
       key_vault_name: ${{ steps.capture.outputs.key_vault_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Validate deployment configuration
         env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          AZURE_SUBSCRIPTION_ID: ${{ needs.prepare.outputs.subscription_id }}
+          AZURE_SUBSCRIPTION_ID: ${{ env.DEPLOY_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ env.DEPLOY_RESOURCE_GROUP }}
         run: |
-          required=(AZURE_CREDENTIALS AZURE_SUBSCRIPTION_ID)
+          required=(AZURE_RESOURCE_GROUP)
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
-              echo "Missing required GitHub environment value: $name" >&2
+              echo "Missing required repository configuration value: $name" >&2
               exit 1
             fi
           done
 
-          client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
-          client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
-          tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+          if [ -n "$AZURE_CREDENTIALS" ]; then
+            client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
+            client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
+            tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+            subscription_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.subscriptionId // empty')
 
-          if [ -z "$client_id" ] || [ -z "$client_secret" ] || [ -z "$tenant_id" ]; then
-            echo "AZURE_CREDENTIALS must be a JSON object containing clientId, clientSecret, and tenantId." >&2
+            if [ -z "$client_id" ] || [ -z "$client_secret" ] || [ -z "$tenant_id" ] || [ -z "$subscription_id" ]; then
+              echo "AZURE_CREDENTIALS must be a JSON object containing clientId, clientSecret, tenantId, and subscriptionId." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+
+          if [ -n "$AZURE_CLIENT_SECRET" ]; then
+            if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
+              echo "AZURE_CLIENT_SECRET requires AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
+            echo "Provide either repository secret AZURE_CREDENTIALS, repository secret AZURE_CLIENT_SECRET with AZURE_CLIENT_ID and AZURE_TENANT_ID, or repository-level OIDC settings AZURE_CLIENT_ID and AZURE_TENANT_ID." >&2
             exit 1
           fi
 
-      - name: Azure CLI login
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          AZURE_SUBSCRIPTION_ID: ${{ needs.prepare.outputs.subscription_id }}
-        run: |
-          client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
-          client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
-          tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+          if [ -z "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "Missing required repository configuration value: AZURE_SUBSCRIPTION_ID" >&2
+            exit 1
+          fi
 
-          az login \
-            --service-principal \
-            --username "$client_id" \
-            --password "$client_secret" \
-            --tenant "$tenant_id"
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      - name: Azure login with secret credentials
+        if: env.AZURE_CREDENTIALS != ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: false
+
+      - name: Azure login with client secret
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET != ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          creds: ${{ format('{{"clientId":"{0}","clientSecret":"{1}","tenantId":"{2}","subscriptionId":"{3}"}}', env.AZURE_CLIENT_ID, env.AZURE_CLIENT_SECRET, env.AZURE_TENANT_ID, env.DEPLOY_SUBSCRIPTION_ID) }}
+          enable-AzPSSession: false
+
+      - name: Azure login with OIDC
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET == ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.DEPLOY_SUBSCRIPTION_ID }}
+          enable-AzPSSession: false
 
       - name: Ensure resource group exists
         run: |
           az group create \
-            --name "${{ needs.prepare.outputs.resource_group }}" \
+            --name "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --location "${{ needs.prepare.outputs.location }}"
+
+      - name: Register Azure resource providers
+        run: |
+          providers=(Microsoft.Web Microsoft.KeyVault Microsoft.Insights Microsoft.CognitiveServices)
+
+          for provider in "${providers[@]}"; do
+            state=$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo "NotRegistered")
+
+            if [ "$state" != "Registered" ]; then
+              if ! register_output=$(az provider register --namespace "$provider" 2>&1); then
+                echo "$register_output" >&2
+                echo "Unable to register Azure resource provider $provider. Register it once at the subscription level with an Owner or Contributor plus /register/action permission, then rerun this workflow." >&2
+                exit 1
+              fi
+
+              for attempt in {1..30}; do
+                state=$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo "NotRegistered")
+
+                if [ "$state" = "Registered" ]; then
+                  break
+                fi
+
+                if [ "$attempt" -eq 30 ]; then
+                  echo "Azure resource provider $provider did not reach Registered state in time. Confirm subscription-level registration, then rerun this workflow." >&2
+                  exit 1
+                fi
+
+                sleep 10
+              done
+            fi
+          done
 
       - name: Validate Bicep
         run: az bicep build --file infra/main.bicep
@@ -122,51 +211,37 @@ jobs:
       - name: Preview infrastructure changes
         run: |
           az deployment group what-if \
-            --resource-group "${{ needs.prepare.outputs.resource_group }}" \
+            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --template-file infra/main.bicep \
-            --parameters @"${{ needs.prepare.outputs.parameter_file }}"
+            --parameters "${{ needs.prepare.outputs.parameter_file }}"
 
       - name: Deploy infrastructure
         run: |
           az deployment group create \
             --name "deploy-${{ github.run_id }}" \
-            --resource-group "${{ needs.prepare.outputs.resource_group }}" \
+            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --template-file infra/main.bicep \
-            --parameters @"${{ needs.prepare.outputs.parameter_file }}"
+            --parameters "${{ needs.prepare.outputs.parameter_file }}"
 
       - name: Capture infrastructure outputs
         id: capture
         run: |
           web_app_name=$(az deployment group show \
             --name "deploy-${{ github.run_id }}" \
-            --resource-group "${{ needs.prepare.outputs.resource_group }}" \
+            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --query properties.outputs.webAppName.value -o tsv)
           web_app_host_name=$(az deployment group show \
             --name "deploy-${{ github.run_id }}" \
-            --resource-group "${{ needs.prepare.outputs.resource_group }}" \
+            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --query properties.outputs.webAppHostName.value -o tsv)
           key_vault_name=$(az deployment group show \
             --name "deploy-${{ github.run_id }}" \
-            --resource-group "${{ needs.prepare.outputs.resource_group }}" \
+            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --query properties.outputs.keyVaultName.value -o tsv)
 
           echo "web_app_name=$web_app_name" >> "$GITHUB_OUTPUT"
           echo "web_app_host_name=$web_app_host_name" >> "$GITHUB_OUTPUT"
           echo "key_vault_name=$key_vault_name" >> "$GITHUB_OUTPUT"
-
-      - name: Seed Key Vault secret
-        run: |
-          FOUNDRY_API_KEY=$(az cognitiveservices account keys list \
-            --name "$(az deployment group show \
-              --name "deploy-${{ github.run_id }}" \
-              --resource-group "${{ needs.prepare.outputs.resource_group }}" \
-              --query properties.outputs.openAiAccountName.value -o tsv)" \
-            --resource-group "${{ needs.prepare.outputs.resource_group }}" \
-            --query key1 -o tsv)
-          az keyvault secret set \
-            --vault-name "${{ steps.capture.outputs.key_vault_name }}" \
-            --name foundry-api-key \
-            --value "$FOUNDRY_API_KEY"
 
   app:
     runs-on: ubuntu-latest
@@ -174,26 +249,39 @@ jobs:
       - prepare
       - infra
     timeout-minutes: 30
-    environment: ${{ needs.prepare.outputs.deploy_environment }}
+    env:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+      DEPLOY_RESOURCE_GROUP: ${{ inputs.resource_group || vars.AZURE_RESOURCE_GROUP || secrets.AZURE_RESOURCE_GROUP || vars.RESOURCE_GROUP || secrets.RESOURCE_GROUP }}
+      DEPLOY_SUBSCRIPTION_ID: ${{ inputs.subscription_id || vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID || fromJson(secrets.AZURE_CREDENTIALS).subscriptionId }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
-      - name: Azure CLI login
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          AZURE_SUBSCRIPTION_ID: ${{ needs.prepare.outputs.subscription_id }}
-        run: |
-          client_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientId // empty')
-          client_secret=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.clientSecret // empty')
-          tenant_id=$(printf '%s' "$AZURE_CREDENTIALS" | jq -r '.tenantId // empty')
+      - name: Azure login with secret credentials
+        if: env.AZURE_CREDENTIALS != ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: false
 
-          az login \
-            --service-principal \
-            --username "$client_id" \
-            --password "$client_secret" \
-            --tenant "$tenant_id"
-          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+      - name: Azure login with client secret
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET != ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          creds: ${{ format('{{"clientId":"{0}","clientSecret":"{1}","tenantId":"{2}","subscriptionId":"{3}"}}', env.AZURE_CLIENT_ID, env.AZURE_CLIENT_SECRET, env.AZURE_TENANT_ID, env.DEPLOY_SUBSCRIPTION_ID) }}
+          enable-AzPSSession: false
+
+      - name: Azure login with OIDC
+        if: env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_SECRET == ''
+        uses: Azure/login@93381592711f247e165c389ebb30b596c84cdc48
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.DEPLOY_SUBSCRIPTION_ID }}
+          enable-AzPSSession: false
 
       - name: Package application
         run: |
@@ -202,7 +290,7 @@ jobs:
       - name: Deploy application package
         run: |
           az webapp deploy \
-            --resource-group "${{ needs.prepare.outputs.resource_group }}" \
+            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --name "${{ needs.infra.outputs.web_app_name }}" \
             --src-path "$RUNNER_TEMP/qualsdemo.zip" \
             --type zip

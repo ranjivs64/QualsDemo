@@ -32,7 +32,7 @@ param foundryModel string = 'gpt-4o-mini'
 param foundryModelVersion string = '2024-07-18'
 
 @description('Azure OpenAI deployment SKU name.')
-param aiDeploymentSkuName string = 'Standard'
+param aiDeploymentSkuName string = 'GlobalStandard'
 
 @description('Azure OpenAI deployment capacity.')
 @minValue(1)
@@ -84,8 +84,9 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   location: location
   tags: commonTags
   properties: {
+    accessPolicies: []
     tenantId: tenant().tenantId
-    enableRbacAuthorization: true
+    enableRbacAuthorization: false
     enabledForDeployment: false
     enabledForDiskEncryption: false
     enabledForTemplateDeployment: false
@@ -126,6 +127,14 @@ resource openAiDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024
       version: foundryModelVersion
     }
     versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
+  }
+}
+
+resource foundryApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: foundryApiKeySecretName
+  properties: {
+    value: listKeys(openAiAccount.id, openAiAccount.apiVersion).key1
   }
 }
 
@@ -207,15 +216,26 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       ]
     }
   }
+  dependsOn: [
+    foundryApiKeySecret
+  ]
 }
 
-resource keyVaultSecretsUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, webApp.identity.principalId, 'KeyVaultSecretsUser')
-  scope: keyVault
+resource keyVaultWebAppAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
+  parent: keyVault
+  name: 'add'
   properties: {
-    principalId: webApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    accessPolicies: [
+      {
+        tenantId: tenant().tenantId
+        objectId: webApp.identity.principalId
+        permissions: {
+          secrets: [
+            'get'
+          ]
+        }
+      }
+    ]
   }
 }
 

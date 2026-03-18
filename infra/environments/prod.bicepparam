@@ -2,5 +2,5 @@ using '../main.bicep'
 
 param projectName = 'qualsdemo'
 param environmentName = 'prod'
-param location = 'uksouth'
+param location = 'centralus'
 param appServiceSkuName = 'P1v3'

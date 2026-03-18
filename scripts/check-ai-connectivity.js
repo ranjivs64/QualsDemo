@@ -1,3 +1,5 @@
+require("../server/loadEnv");
+
 const { runAiConnectivityCheck } = require("../server/aiClient");
 
 async function main() {

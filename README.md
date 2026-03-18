@@ -93,9 +93,9 @@ Example using Azure AI Foundry:
 ```env
 QUAL_AI_PROVIDER=foundry
 FOUNDRY_API_KEY=<your-foundry-key>
-FOUNDRY_ENDPOINT=https://<your-project>.inference.ai.azure.com
-FOUNDRY_API_VERSION=2024-12-01-preview
-QUAL_AI_MODEL=gpt-5.1-2026-01-15
+FOUNDRY_ENDPOINT=https://<your-resource-name>.openai.azure.com
+FOUNDRY_API_VERSION=2024-10-21
+QUAL_AI_MODEL=gpt-4o-mini
 QUAL_DB_PATH=server/data/qualextract.sqlite
 QUAL_UPLOADS_DIR=server/uploads
 ```
@@ -205,33 +205,49 @@ Do not scale this implementation out to multiple instances while it still uses S
 
 ### Manual inputs at deployment time
 
-After the one-time GitHub and Azure trust setup is done, the operator only provides:
+After the one-time GitHub and Azure trust setup is done, the operator can either provide runtime inputs or rely on repository-level GitHub variables for the Azure subscription and resource group.
+
+Runtime inputs:
 
 1. Azure subscription ID
 2. Azure resource group name
 3. Deployment environment: `dev`, `staging`, or `prod`
 
-In workflow terms, those are the runtime values for `subscription_id` and `resource_group`, plus the environment selector.
+If you store them as repository variables instead, the workflow also supports:
+
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_RESOURCE_GROUP` or `RESOURCE_GROUP`
+
+In workflow terms, `subscription_id` and `resource_group` can now come from either runtime inputs or repository variables, plus the environment selector.
+
+The workflow also accepts these same values from repository secrets if that is how they are currently stored.
 
 Everything else is provisioned and wired automatically by the workflow and Bicep template.
 
 ### One-time GitHub and Azure setup
 
-This repository now supports the simpler single-secret authentication path.
+This repository supports both secret-based login and GitHub OIDC. OIDC is the better path when you already have a federated credential on the Azure app registration.
 
-Use one GitHub secret named `AZURE_CREDENTIALS` that contains the Azure service principal JSON payload, then provide only subscription ID and resource group when you run the workflow.
+Use either:
+
+- GitHub OIDC with repository-level `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, plus either the workflow `subscription_id` input or the repository variable `AZURE_SUBSCRIPTION_ID`
+- repository secret `AZURE_CLIENT_SECRET` together with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`
+- one repository secret named `AZURE_CREDENTIALS` containing the Azure service principal JSON payload
 
 Step by step:
 
-1. Create an Azure service principal with deployment rights to the target subscription or resource group.
-2. Export its credentials as the standard Azure JSON payload used by GitHub Actions.
-3. In GitHub, create the deployment environments you want to use: `dev`, `staging`, and `prod`.
-4. In each GitHub environment, add one secret named `AZURE_CREDENTIALS`.
+1. Create an Azure app registration or service principal with deployment rights to the target subscription or resource group.
+2. If using OIDC, add a federated credential that trusts this GitHub repository and branch.
+3. At the repository level, add either:
+   - OIDC configuration `AZURE_CLIENT_ID` and `AZURE_TENANT_ID`, or
+   - `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and repository secret `AZURE_CLIENT_SECRET`, or
+   - one secret named `AZURE_CREDENTIALS`
+4. At the repository level, add `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP` as variables or secrets if you do not want to pass them as workflow inputs.
 5. Ensure the target Azure resource group already exists.
-6. Run the workflow and provide only:
-   - Azure subscription ID
-   - Azure resource group name
-   - deployment environment
+6. Run the workflow and either:
+   - provide Azure subscription ID and Azure resource group as workflow inputs, or
+   - leave them blank and rely on repository configuration `AZURE_SUBSCRIPTION_ID` and `AZURE_RESOURCE_GROUP`
+7. Choose the deployment environment
 
 The expected `AZURE_CREDENTIALS` JSON shape is:
 
@@ -239,12 +255,25 @@ The expected `AZURE_CREDENTIALS` JSON shape is:
 {
   "clientId": "<azure-client-id>",
   "clientSecret": "<azure-client-secret>",
-  "tenantId": "<azure-tenant-id>",
-  "subscriptionId": "<azure-subscription-id>"
+   "tenantId": "<azure-tenant-id>",
+   "subscriptionId": "<azure-subscription-id>"
 }
 ```
 
-The workflow uses the runtime `subscription_id` input when deploying, so the subscription ID in the JSON payload is informational for this repo's current flow.
+When `AZURE_CREDENTIALS` is present, the workflow can also use its `subscriptionId` field as the default deployment subscription if you do not pass `subscription_id` and have not set `AZURE_SUBSCRIPTION_ID` separately.
+
+The infrastructure template defaults Azure OpenAI deployments to `GlobalStandard`, which is the supported deployment type for the current `gpt-4o-mini` configuration in the selected region.
+
+The workflow prefers runtime inputs when provided, otherwise it falls back to repository variables or repository secrets for subscription and resource group. The subscription ID inside `AZURE_CREDENTIALS` remains informational for this repo's current flow.
+
+If you use GitHub OIDC instead of `AZURE_CREDENTIALS`, configure these at the repository level:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+
+You do not need `AZURE_CLIENT_SECRET` for OIDC.
+
+If your federated credential is not set up yet, you can also use a repository secret named `AZURE_CLIENT_SECRET` together with `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` to authenticate without OIDC.
 
 If you want to create placeholder entries first and replace them later, run:
 
@@ -253,6 +282,8 @@ pwsh ./scripts/bootstrap-github-deploy-placeholders.ps1 -Repository 'ranjivs64/Q
 ```
 
 This script creates the `dev`, `staging`, and `prod` GitHub environments if needed, then adds a placeholder `AZURE_CREDENTIALS` secret to each one.
+
+If you use repository-level configuration, you do not need GitHub Actions environments for deployment authentication.
 
 ### What you do not need to preconfigure
 
@@ -265,7 +296,7 @@ These values are created and populated by the deployment flow:
 - `FOUNDRY_MODEL`
 - `FOUNDRY_API_KEY`
 
-You also do not need to store `AZURE_SUBSCRIPTION_ID` as a GitHub variable because the workflow accepts the subscription ID as a runtime input.
+You do not need to store `AZURE_SUBSCRIPTION_ID` or `AZURE_RESOURCE_GROUP` at the repository level if you prefer passing them at workflow runtime, but the workflow supports both approaches.
 
 ### How to run the deployment
 

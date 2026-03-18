@@ -1,3 +1,10 @@
 - 2026-03-17: Simplified deploy pipeline to remove manual Foundry inputs; deploy workflow now accepts subscription_id, resource_group, and environment.
 - 2026-03-17: infra/main.bicep now provisions Azure OpenAI account and deployment, and README cloud deployment guidance matches the workflow.
 - 2026-03-17: Validation completed with clean diagnostics for deploy.yml, ci.yml, main.bicep, and README; npm test passes 16/16 locally.
+- 2026-03-16: Added a local .env configured for Azure AI Foundry with placeholder FOUNDRY_API_KEY and FOUNDRY_ENDPOINT values for local development.
+- 2026-03-17: Fixed local startup by lazy-loading pdf-parse so DOMMatrix import errors no longer crash the server at boot; npm test now passes and /api/v1/health responds locally.
+- 2026-03-17: Added automatic .env loading for local runtime entrypoints; ai:check now reads .env but the current Foundry config still returns 400 API version not supported.
+- 2026-03-17: Aligned local Foundry docs and .env templates with the repo's Azure OpenAI deployment shape: endpoint placeholder now uses .openai.azure.com, API version is 2024-10-21, and model is gpt-4o-mini.
+- 2026-03-17: deploy.yml now supports either AZURE_CREDENTIALS JSON or split Azure auth values (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID) for GitHub environment-based deployment.
+- 2026-03-17: Pushed commit 912b7fb to origin/main with OIDC-capable deploy workflow, GitHub variable fallback for subscription/resource group, README deployment updates, and centralus environment parameter changes.
+- 2026-03-17: GitHub CLI token could push code but could not dispatch the workflow or read environment variables/secrets; Actions APIs returned 403 admin-rights errors, so deployment must be started by a repo admin or through the GitHub web UI.
