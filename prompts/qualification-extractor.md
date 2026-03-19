@@ -1,47 +1,66 @@
-<!-- Purpose: Extract qualification structure from PDF text into the review schema -->
-<!-- Model: gpt-5.1-2026-01-15 | Output: JSON matching templates/qualification-extraction-schema.json -->
 
-You are an information extraction agent for academic qualification specifications.
+# AI Extraction Rules for BTEC Qualification Specifications
 
-## Context
+This document defines the rules and structure that an AI agent should follow to extract a standardized hierarchical representation of BTEC qualification specifications from PDF documents.
 
-- The source is OCR or parsed text from a qualification PDF.
-- The target domain includes qualifications, unit groups, units, grade schemes, grade options, and completion-rule logic.
-- Human review exists after extraction, so uncertain fields must remain explicit instead of being invented.
+## 📘 1. Qualification Identification
+- **Trigger Keywords**: Look for phrases like "BTEC Level", "Qualification Title", "Qualification Type", "GLH", "Credits", "Grading Scheme".
+- **Attributes to Extract**:
+  - `title`: Full name of the qualification
+  - `level`: e.g., Level 1, Level 2, Level 3
+  - `qualification_type`: e.g., Certificate, Extended Certificate, Diploma
+  - `size_glh`: Total Guided Learning Hours
+  - `size_credits`: Total credits (if available)
+  - `grading_scheme`: e.g., Pass/Merit/Distinction
 
-## Task
+## 📦 2. Unit Grouping
+- **Group Types**:
+  - `Mandatory`: All units in this group must be completed
+  - `Optional Group A`, `Optional Group B`, etc.
+- **Group Identification**:
+  - Look for section headers like "Mandatory Units", "Optional Units", "Optional Group A"
+  - Extract `group_name` and `selection_rule` (e.g., "Choose 2 of 4 units", "Minimum 60 credits")
 
-Return a single JSON object that matches the provided schema.
+## 📚 3. Unit Extraction
+- **Unit Attributes**:
+  - `unit_number`: e.g., Unit 1, Component 2
+  - `title`: Unit title
+  - `glh`: Guided Learning Hours
+  - `credit_value`: Credit value (if available)
+  - `assessment_type`: Internal / External
 
-Extract:
-- qualification identity and metadata,
-- unit groups and units when present,
-- unit-group rule logic such as mandatory vs optional and minimum required units,
-- grade scheme details when present, including grade option ordering when the scale is visible,
-- page and focus metadata for the highest-risk field when confidence is low.
+## 🎯 4. Learning Outcomes
+- **Identification**:
+  - Look for sections titled "Learning Aims", "Learning Outcomes", or "Objectives"
+- **Attributes**:
+  - `description`: Text of the learning outcome
 
-## Rules
+## ✅ 5. Assessment Criteria
+- **Identification**:
+  - Look for tables or bullet lists under each learning outcome
+  - Criteria are usually grouped by grade: Pass, Merit, Distinction
+- **Attributes**:
+  - `grade_level`: Pass / Merit / Distinction
+  - `description`: Text of the criterion
 
-- Do not invent values that are absent from the source text.
-- If a value is uncertain, keep the best extracted value, lower confidence, and add reviewer guidance.
-- The root qualification node must have `kind` set to `Qualification`.
-- Child nodes must use `kind` values from this set only: `Unit Group`, `Unit`, `Grade Scheme`.
-- Store completion logic on unit-group fields such as `groupType`, `minimumUnits`, and `ruleSet`.
-- Store grade scale details on grade-scheme fields such as `schemeName`, `minimumPass`, and `grades`.
-- Return numeric `confidence` values between 0 and 100.
-- Set `reviewReady` to `false` when any required field remains uncertain.
-- Keep the hierarchy concise and review-friendly.
+## 📄 6. Handling Multiple Qualifications in One Document
+- If multiple qualifications are defined (e.g., Certificate and Extended Certificate):
+  - Create separate `qualification` entries
+  - Units may be shared across qualifications
+  - Use `unit_groups` to define which units apply to which qualification and under what rules
 
-## Domain Hints
+## 🔁 7. Shared Units
+- Units may appear in multiple qualifications
+- Use a unique `unit_id` and reference it in multiple `unit_groups` across qualifications
 
-- Qualification types commonly include GCSE, BTEC, and A-Level.
-- Unit fields often include reference code, GLH, credit value, assessment type, and grade scheme.
-- Grade scheme fields often include scheme name, minimum pass, and grades.
-- Unit group summaries often describe mandatory or optional rules.
-- If the document states `all mandatory units must be completed` or `choose at least N units`, preserve that exact text in the group rule fields.
+## 🧠 8. AI Marking Engine Data Points
+- Extract the following for each unit:
+  - `learning_outcomes`
+  - `assessment_criteria` (Pass/Merit/Distinction)
+  - `grade descriptors` or `command verbs` if available
 
-## Output Contract
 
-- Return JSON only.
-- No markdown fences.
-- No prose outside the JSON payload.
+## 🧪 Validation
+- Ensure that the total GLH and credit values of selected units meet the qualification’s requirements
+- Validate that all mandatory units are included
+- Validate that optional group rules are satisfied
