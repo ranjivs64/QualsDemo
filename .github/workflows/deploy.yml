@@ -283,9 +283,27 @@ jobs:
           subscription-id: ${{ env.DEPLOY_SUBSCRIPTION_ID }}
           enable-AzPSSession: false
 
+      - name: Configure package deployment mode
+        run: |
+          az webapp config appsettings set \
+            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
+            --name "${{ needs.infra.outputs.web_app_name }}" \
+            --settings \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              ENABLE_ORYX_BUILD=false \
+              WEBSITE_RUN_FROM_PACKAGE=1
+
       - name: Package application
         run: |
-          git archive --format=zip --output "$RUNNER_TEMP/qualsdemo.zip" HEAD
+          deploy_dir="$RUNNER_TEMP/qualsdemo-package"
+          rm -rf "$deploy_dir"
+          mkdir -p "$deploy_dir"
+          git archive HEAD | tar -x -C "$deploy_dir"
+
+          cd "$deploy_dir"
+          npm ci --omit=dev
+          mkdir -p server/data server/uploads
+          zip -qr "$RUNNER_TEMP/qualsdemo.zip" .
 
       - name: Deploy application package
         run: |
