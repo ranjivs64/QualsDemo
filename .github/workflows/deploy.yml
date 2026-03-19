@@ -293,11 +293,12 @@ jobs:
             --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
             --name "${{ needs.infra.outputs.web_app_name }}" \
             --src-path "$RUNNER_TEMP/qualsdemo.zip" \
+            --track-status false \
             --type zip
 
       - name: Smoke test health endpoint
         run: |
-          for attempt in $(seq 1 20); do
+          for attempt in $(seq 1 40); do
             if curl --fail --silent --show-error "https://${{ needs.infra.outputs.web_app_host_name }}/api/v1/health"; then
               exit 0
             fi

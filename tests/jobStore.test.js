@@ -50,6 +50,30 @@ Assessment Internal
 Grade scheme Pass / Merit / Distinction
 `;
 
+function createReviewJob() {
+  const created = createUploadedJob("BTEC_Level3_Business_Spec.pdf");
+  const draft = createExtractionDraftFromText(created, {
+    text: sampleQualificationText,
+    pageCount: 12
+  });
+  const financeUnit = draft.qualification.children[0].children.find((child) => child.title === "Unit 3: Personal and Business Finance");
+  const optionalUnit = draft.qualification.children[1].children[0];
+
+  draft.reviewReady = false;
+  draft.confidence = 82;
+  draft.documentFocus = { top: 31, height: 13, label: "Focus: Unit 3 GLH" };
+  financeUnit.id = "unit-3";
+  optionalUnit.id = "unit-8";
+  financeUnit.fields.glh = "120?";
+  financeUnit.summary = "Reference T/507/5000, GLH requires verification";
+  financeUnit.confidence = 68;
+  financeUnit.needsAttention = true;
+  financeUnit.guidance = "AI extracted a smudged GLH value. Verify before persistence.";
+  financeUnit.focus = { top: 31, height: 13, label: "Focus: Unit 3 GLH" };
+
+  return hydrateJobForReview(created.id, draft);
+}
+
 test.beforeEach(() => {
   resetState();
 });
@@ -118,7 +142,8 @@ test("createExtractionDraftFromText builds groups, units, grade schemes, and rul
 });
 
 test("updateNodeField updates a node field value", () => {
-  const job = getJob("job-btec-business");
+  const reviewJob = createReviewJob();
+  const job = getJob(reviewJob.id);
   assert.ok(job);
   updateNodeField(job.id, "unit-3", "glh", "120");
   const updated = getJob(job.id);
@@ -126,20 +151,22 @@ test("updateNodeField updates a node field value", () => {
 });
 
 test("verifyNode marks the review job ready for persistence", () => {
-  const updated = verifyNode("job-btec-business", "unit-3");
+  const reviewJob = createReviewJob();
+  const updated = verifyNode(reviewJob.id, "unit-3");
   assert.equal(updated.reviewReady, true);
   assert.equal(updated.confidence, 95);
   assert.equal(updated.qualification.children[0].children[1].fields.glh, "120");
 });
 
 test("approveJob persists only after review is ready", () => {
-  verifyNode("job-btec-business", "unit-3");
-  const approved = approveJob("job-btec-business");
+  const reviewJob = createReviewJob();
+  verifyNode(reviewJob.id, "unit-3");
+  const approved = approveJob(reviewJob.id);
   assert.equal(approved.status, "persisted");
   assert.ok(approved.persistedAt);
 
   const persisted = listPersistedQualifications();
-  const qualification = persisted.find((item) => item.sourceJobId === "job-btec-business");
+  const qualification = persisted.find((item) => item.sourceJobId === reviewJob.id);
   assert.ok(qualification);
 
   const detail = getPersistedQualification(qualification.id);
@@ -154,7 +181,8 @@ test("approveJob persists only after review is ready", () => {
 });
 
 test("reprocessJob resets a job back to processing", () => {
-  const job = reprocessJob("job-btec-business");
+  const reviewJob = createReviewJob();
+  const job = reprocessJob(reviewJob.id);
   assert.equal(job.status, "processing");
   assert.equal(job.reviewReady, false);
   assert.equal(job.qualification, null);

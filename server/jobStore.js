@@ -68,24 +68,67 @@ function createUploadedJob(fileName, artifact = null) {
   return saveJob(job);
 }
 
+function inferQualificationType(fileName) {
+  const value = String(fileName || "");
+  if (/btec/i.test(value)) {
+    return "BTEC";
+  }
+  if (/gcse/i.test(value)) {
+    return "GCSE";
+  }
+  if (/a[ _-]?level/i.test(value)) {
+    return "A-Level";
+  }
+  return "Qualification";
+}
+
+function inferQualificationTitle(fileName) {
+  const stem = path.basename(String(fileName || "Qualification Draft"), path.extname(String(fileName || "")));
+  return stem.replace(/[_-]+/g, " ").trim() || "Qualification Draft";
+}
+
+function createDefaultDraft(fileName, pages) {
+  const qualificationName = inferQualificationTitle(fileName);
+  const qualificationType = inferQualificationType(fileName);
+  return {
+    qualificationCode: "Pending",
+    confidence: 79,
+    reviewReady: false,
+    pages: clone(pages || { current: 1, total: 72 }),
+    documentFocus: { top: 28, height: 12, label: "Focus pending" },
+    qualification: {
+      id: "qualification-draft",
+      kind: "Qualification",
+      title: qualificationName,
+      summary: "Qualification draft generated without seed fixtures",
+      confidence: 79,
+      fields: {
+        qualificationName,
+        code: "Pending",
+        type: qualificationType,
+        level: "Pending",
+        awardingBody: "Pending",
+        totalQualificationTime: "Pending"
+      },
+      children: []
+    },
+    sourceTextExcerpt: null,
+    extractionMeta: {
+      provider: "fallback",
+      extractedAt: new Date().toISOString(),
+      parser: "default-template"
+    }
+  };
+}
+
 function normalizeDraft(job, draftOrFileName) {
   if (typeof draftOrFileName === "object" && draftOrFileName) {
     return draftOrFileName;
   }
-  const seed = loadSeedState().jobs[0];
-  return {
-    qualificationCode: seed.qualificationCode,
-    confidence: 79,
-    reviewReady: false,
-    pages: clone(seed.pages),
-    documentFocus: clone(seed.documentFocus),
-    qualification: clone(seed.qualification),
-    sourceTextExcerpt: null,
-    extractionMeta: {
-      provider: "seed",
-      extractedAt: new Date().toISOString()
-    }
-  };
+  const fileName = typeof draftOrFileName === "string" && draftOrFileName
+    ? draftOrFileName
+    : job && job.fileName;
+  return createDefaultDraft(fileName, job && job.pages);
 }
 
 function hydrateJobForReview(jobId, draftOrFileName) {

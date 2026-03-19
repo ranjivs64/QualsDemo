@@ -4,8 +4,6 @@ const path = require("node:path");
 const { getJob, hydrateJobForReview } = require("./jobStore");
 const { resolveArtifactPath } = require("./uploadStore");
 const { getAiConfigurationIssues, getAiProviderName, isAiConfigured, getModelName, extractQualificationWithAi } = require("./aiClient");
-
-const seedState = JSON.parse(fs.readFileSync(path.join(__dirname, "seed-data.json"), "utf8"));
 let pdfParseConstructor;
 
 function getPdfParseConstructor() {
@@ -21,15 +19,34 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function detectTemplate(fileName, documentText) {
-  const haystack = `${fileName} ${documentText}`.toLowerCase();
-  if (haystack.includes("math")) {
-    return seedState.jobs.find((job) => job.id === "job-maths") || seedState.jobs[1];
-  }
-  if (haystack.includes("geography") || haystack.includes("geo")) {
-    return seedState.jobs.find((job) => job.id === "job-gcse-geo") || seedState.jobs[2];
-  }
-  return seedState.jobs.find((job) => job.id === "job-btec-business") || seedState.jobs[0];
+function createDefaultTemplate(fileName, documentText) {
+  const qualificationType = detectType(`${fileName}\n${documentText}`, "Qualification");
+  const qualificationTitle = detectQualificationTitle(fileName, documentText, "Qualification Draft");
+  const qualificationCode = detectQualificationCode(fileName, documentText, "Pending");
+  const awardingBody = detectAwardingBody(documentText, "Pending");
+
+  return {
+    qualificationCode,
+    status: "processing",
+    pages: { current: 1, total: 72 },
+    documentFocus: { top: 28, height: 12, label: "Focus pending" },
+    qualification: {
+      id: "qualification-draft",
+      kind: "Qualification",
+      title: qualificationTitle,
+      summary: "Qualification draft generated from uploaded content",
+      confidence: 79,
+      fields: {
+        qualificationName: qualificationTitle,
+        code: qualificationCode,
+        type: qualificationType,
+        level: "Pending",
+        awardingBody,
+        totalQualificationTime: "Pending"
+      },
+      children: []
+    }
+  };
 }
 
 function detectQualificationCode(fileName, documentText, fallbackCode) {
@@ -363,7 +380,7 @@ function buildQualificationFromText(job, parsedDocument, template) {
 }
 
 function createExtractionDraftFromText(job, parsedDocument) {
-  const template = clone(detectTemplate(job.fileName, parsedDocument.text));
+  const template = clone(createDefaultTemplate(job.fileName, parsedDocument.text));
   const parsedDraft = buildQualificationFromText(job, parsedDocument, template);
   if (parsedDraft) {
     return parsedDraft;
