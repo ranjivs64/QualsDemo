@@ -9,7 +9,7 @@ const {
   persistApprovedQualification,
   listPersistedQualifications,
   getPersistedQualification
-} = require("./database");
+} = require("./databaseStore");
 
 const seedPath = path.join(__dirname, "seed-data.json");
 
@@ -90,28 +90,34 @@ function inferQualificationTitle(fileName) {
 function createDefaultDraft(fileName, pages) {
   const qualificationName = inferQualificationTitle(fileName);
   const qualificationType = inferQualificationType(fileName);
+  const qualification = {
+    id: "qualification-draft",
+    kind: "Qualification",
+    title: qualificationName,
+    summary: "Qualification draft generated without seed fixtures",
+    confidence: 79,
+    fields: {
+      qualificationName,
+      code: "Pending",
+      type: qualificationType,
+      qualificationType,
+      level: "Pending",
+      awardingBody: "Pending",
+      sizeGlh: "Pending",
+      sizeCredits: "Pending",
+      gradingScheme: "Pending",
+      totalQualificationTime: "Pending"
+    },
+    children: []
+  };
   return {
     qualificationCode: "Pending",
     confidence: 79,
     reviewReady: false,
     pages: clone(pages || { current: 1, total: 72 }),
     documentFocus: { top: 28, height: 12, label: "Focus pending" },
-    qualification: {
-      id: "qualification-draft",
-      kind: "Qualification",
-      title: qualificationName,
-      summary: "Qualification draft generated without seed fixtures",
-      confidence: 79,
-      fields: {
-        qualificationName,
-        code: "Pending",
-        type: qualificationType,
-        level: "Pending",
-        awardingBody: "Pending",
-        totalQualificationTime: "Pending"
-      },
-      children: []
-    },
+    qualification,
+    qualifications: [qualification],
     sourceTextExcerpt: null,
     extractionMeta: {
       provider: "fallback",
@@ -142,6 +148,11 @@ function hydrateJobForReview(jobId, draftOrFileName) {
     job.pages = clone(draft.pages);
     job.documentFocus = clone(draft.documentFocus);
     job.qualification = clone(draft.qualification);
+    job.qualifications = clone(Array.isArray(draft.qualifications) && draft.qualifications.length
+      ? draft.qualifications
+      : draft.qualification
+        ? [draft.qualification]
+        : []);
     job.sourceTextExcerpt = draft.sourceTextExcerpt || null;
     job.extractionMeta = draft.extractionMeta || null;
   });
@@ -217,6 +228,7 @@ function reprocessJob(jobId) {
     job.confidence = 0;
     job.updatedAt = formatTimestamp();
     job.qualification = null;
+    job.qualifications = [];
     job.documentFocus = { top: 28, height: 12, label: "Focus pending" };
     job.sourceTextExcerpt = null;
     job.extractionMeta = null;

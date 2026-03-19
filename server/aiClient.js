@@ -158,8 +158,14 @@ function validateAiPayload(payload) {
   if (!payload || typeof payload !== "object") {
     throw new Error("AI response was empty.");
   }
-  if (!payload.qualification || payload.qualification.kind !== "Qualification") {
-    throw new Error("AI response did not return a qualification root node.");
+  if (Array.isArray(payload.qualifications) && payload.qualifications.length > 0) {
+    if (!payload.qualification) {
+      payload.qualification = payload.qualifications[0];
+    }
+  } else if (payload.qualification && payload.qualification.kind === "Qualification") {
+    payload.qualifications = [payload.qualification];
+  } else {
+    throw new Error("AI response did not return any qualification root nodes.");
   }
   if (!payload.pages || typeof payload.pages.total !== "number") {
     throw new Error("AI response omitted page metadata.");

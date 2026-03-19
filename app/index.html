@@ -23,7 +23,7 @@
         <button class="nav-link" data-route="history">History</button>
       </nav>
       <div class="topbar-actions">
-        <button class="ghost-button" id="seedResetButton" type="button">Reset Demo</button>
+        <button class="ghost-button" id="seedResetButton" type="button">Clear Data</button>
         <div class="avatar" aria-label="Logged in as Data Analyst">DA</div>
       </div>
     </header>
@@ -62,10 +62,10 @@
                 <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 7 8h3v6h4V8h3zm-7 13h14v3H5z"/></svg>
               </div>
               <h4>Drop a PDF here or choose a file</h4>
-              <p id="upload-help">Accepted format: PDF. Demo mode simulates extraction and review state transitions.</p>
+              <p id="upload-help">Accepted format: PDF. Upload a real specification or use the helper button to create a quick test job.</p>
               <div class="dropzone-actions">
                 <button class="primary-button" id="selectFileButton" type="button">Choose PDF</button>
-                <button class="secondary-button" id="simulateUploadButton" type="button">Load Demo File</button>
+                <button class="secondary-button" id="simulateUploadButton" type="button">Create Test Job</button>
               </div>
               <input id="fileInput" class="visually-hidden" type="file" accept=".pdf">
             </div>
@@ -120,22 +120,21 @@
                 <div class="highlight-label" id="highlightLabel">Focus: GLH value</div>
               </div>
               <div class="document-page">
-                <h4>Pearson BTEC Level 3 National Extended Diploma in Business</h4>
-                <p class="document-section-label">Unit 3</p>
-                <p class="document-emphasis">Personal and Business Finance</p>
+                <h4>No document selected</h4>
+                <p class="document-section-label">Upload a qualification PDF</p>
+                <p class="document-emphasis">The review canvas will show the current extraction focus after a job is opened.</p>
                 <div class="document-metadata">
                   <div>
-                    <span>Reference</span>
-                    <strong>T/507/5000</strong>
+                    <span>Status</span>
+                    <strong>Awaiting upload</strong>
                   </div>
                   <div>
                     <span>GLH</span>
-                    <strong id="documentGlhValue">120?</strong>
+                    <strong id="documentGlhValue">Pending</strong>
                   </div>
                 </div>
                 <p>
-                  Learners study the purpose and importance of personal and business finance. They develop the
-                  skills and knowledge needed to interpret, analyze, and prepare financial information.
+                  Jobs now start from an empty workspace. No sample qualifications are loaded at startup or after reset.
                 </p>
               </div>
             </div>

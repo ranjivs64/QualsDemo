@@ -7,7 +7,7 @@
     "reviewReady",
     "pages",
     "documentFocus",
-    "qualification"
+    "qualifications"
   ],
   "properties": {
     "qualificationCode": {
@@ -81,9 +81,30 @@
           }
         }
       }
+    },
+    "qualifications": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/qualificationNode" }
     }
   },
   "$defs": {
+    "qualificationNode": {
+      "type": "object",
+      "required": ["id", "kind", "title", "confidence", "fields", "children"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string", "const": "Qualification" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+        "fields": { "type": "object" },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/node" }
+        }
+      }
+    },
     "node": {
       "type": "object",
       "required": ["id", "kind", "title", "confidence", "fields", "children"],
@@ -91,7 +112,7 @@
         "id": { "type": "string" },
         "kind": {
           "type": "string",
-          "enum": ["Unit Group", "Unit", "Grade Scheme"]
+          "enum": ["Unit Group", "Unit", "Grade Scheme", "Learning Outcome", "Assessment Criterion"]
         },
         "title": { "type": "string" },
         "summary": { "type": "string" },

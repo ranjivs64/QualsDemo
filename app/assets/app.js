@@ -44,6 +44,7 @@
     documentHighlight: document.getElementById("documentHighlight"),
     highlightLabel: document.getElementById("highlightLabel"),
     documentGlhValue: document.getElementById("documentGlhValue"),
+    documentCanvas: document.getElementById("documentCanvas"),
     toastStack: document.getElementById("toastStack"),
     seedResetButton: document.getElementById("seedResetButton"),
     jobCardTemplate: document.getElementById("jobCardTemplate"),
@@ -233,6 +234,8 @@
       elements.hierarchyTree.innerHTML = "";
       elements.inspectorContent.className = "inspector-content empty-state";
       elements.inspectorContent.innerHTML = "<h4>No job selected</h4><p>Choose a job from Extract or History to open the review workspace.</p>";
+      elements.highlightLabel.textContent = "Focus: waiting for selection";
+      elements.documentGlhValue.textContent = "Pending";
       elements.approveButton.disabled = true;
       elements.reprocessButton.disabled = true;
       return;
@@ -526,7 +529,7 @@
       renderAll();
       navigate("dashboard");
       setBusyState(false);
-      pushToast("Demo reset", "The MVP state has been reset to the seeded PRD/spec demo data.");
+      pushToast("Workspace cleared", "The application state has been reset to an empty workspace.");
     } catch (error) {
       pushToast("Reset failed", error.message || "Unable to reset the demo state.");
     }

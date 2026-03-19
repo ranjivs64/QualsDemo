@@ -24,28 +24,34 @@ function createDefaultTemplate(fileName, documentText) {
   const qualificationTitle = detectQualificationTitle(fileName, documentText, "Qualification Draft");
   const qualificationCode = detectQualificationCode(fileName, documentText, "Pending");
   const awardingBody = detectAwardingBody(documentText, "Pending");
+  const qualification = {
+    id: "qualification-draft",
+    kind: "Qualification",
+    title: qualificationTitle,
+    summary: "Qualification draft generated from uploaded content",
+    confidence: 79,
+    fields: {
+      qualificationName: qualificationTitle,
+      code: qualificationCode,
+      type: qualificationType,
+      qualificationType,
+      level: "Pending",
+      awardingBody,
+      sizeGlh: "Pending",
+      sizeCredits: "Pending",
+      gradingScheme: "Pending",
+      totalQualificationTime: "Pending"
+    },
+    children: []
+  };
 
   return {
     qualificationCode,
     status: "processing",
     pages: { current: 1, total: 72 },
     documentFocus: { top: 28, height: 12, label: "Focus pending" },
-    qualification: {
-      id: "qualification-draft",
-      kind: "Qualification",
-      title: qualificationTitle,
-      summary: "Qualification draft generated from uploaded content",
-      confidence: 79,
-      fields: {
-        qualificationName: qualificationTitle,
-        code: qualificationCode,
-        type: qualificationType,
-        level: "Pending",
-        awardingBody,
-        totalQualificationTime: "Pending"
-      },
-      children: []
-    }
+    qualification,
+    qualifications: [qualification]
   };
 }
 
@@ -184,6 +190,7 @@ function parseUnitsFromLines(lines) {
       fields: {
         groupType: /optional/i.test(fallbackTitle || "") ? "Optional" : "Mandatory",
         minimumUnits: /optional/i.test(fallbackTitle || "") ? "1" : "0",
+          selectionRule: /optional/i.test(fallbackTitle || "") ? "Choose at least 1 unit" : "All listed units must be completed",
         ruleSet: /optional/i.test(fallbackTitle || "") ? "Choose at least 1 unit" : "All listed units must be completed"
       },
       children: []
@@ -205,6 +212,7 @@ function parseUnitsFromLines(lines) {
         fields: {
           groupType: groupDescriptor.groupType,
           minimumUnits: groupDescriptor.isMandatory ? "0" : "1",
+          selectionRule: groupDescriptor.isMandatory ? "All listed units must be completed" : "Choose at least 1 unit",
           ruleSet: groupDescriptor.isMandatory ? "All listed units must be completed" : "Choose at least 1 unit"
         },
         children: []
@@ -217,6 +225,7 @@ function parseUnitsFromLines(lines) {
     if (/all .*units must be completed|choose .*unit|at least \d+ unit/i.test(line)) {
       pendingRuleText = line;
       if (currentGroup) {
+        currentGroup.fields.selectionRule = line;
         currentGroup.fields.ruleSet = line;
         currentGroup.summary = line;
         const minimumUnits = extractNumber(line, /at least\s+(\d+)/i) || extractNumber(line, /choose\s+(\d+)/i);
@@ -271,11 +280,13 @@ function parseUnitsFromLines(lines) {
       summary: `Reference ${reference || "Pending"}, GLH ${glh || "Pending"}${assessmentType ? `, ${assessmentType.toLowerCase()}ly assessed` : ""}`,
       confidence,
       fields: {
+        unitNumber: `${unitMatch[1]} ${unitMatch[2]}`,
         reference: reference || "Pending",
         glh: glh || "Pending",
         creditValue: creditValue || "Pending",
         assessmentType: assessmentType || "Pending",
-        gradeScheme: gradeScheme || "Pending"
+        gradeScheme: gradeScheme || "Pending",
+        gradingScheme: gradeScheme || "Pending"
       },
       children: []
     };
@@ -348,6 +359,7 @@ function buildQualificationFromText(job, parsedDocument, template) {
       qualificationName: title,
       code,
       type,
+      qualificationType: type,
       awardingBody
     },
     children: parsedGroups
@@ -368,6 +380,7 @@ function buildQualificationFromText(job, parsedDocument, template) {
       ? lowestConfidenceNode.focus
       : clone(template.documentFocus),
     qualification,
+    qualifications: [qualification],
     sourceTextExcerpt: String(parsedDocument.text || "").slice(0, 1000),
     extractionMeta: {
       provider: "fallback",
@@ -395,6 +408,7 @@ function createExtractionDraftFromText(job, parsedDocument) {
   qualification.title = title;
   qualification.fields.code = code;
   qualification.fields.type = type;
+  qualification.fields.qualificationType = type;
   qualification.fields.awardingBody = awardingBody;
 
   return {
@@ -407,6 +421,7 @@ function createExtractionDraftFromText(job, parsedDocument) {
     },
     documentFocus: clone(template.documentFocus),
     qualification,
+    qualifications: [qualification],
     sourceTextExcerpt: String(parsedDocument.text || "").slice(0, 1000),
     extractionMeta: {
       provider: "fallback",
@@ -430,6 +445,9 @@ function mergeDraft(fallbackDraft, aiDraft, parsedDocument) {
     pages: aiDraft.pages || fallbackDraft.pages,
     documentFocus: aiDraft.documentFocus || fallbackDraft.documentFocus,
     qualification: aiDraft.qualification || fallbackDraft.qualification,
+    qualifications: Array.isArray(aiDraft.qualifications) && aiDraft.qualifications.length
+      ? aiDraft.qualifications
+      : fallbackDraft.qualifications,
     sourceTextExcerpt: fallbackDraft.sourceTextExcerpt,
     extractionMeta: {
       provider: getAiProviderName(),

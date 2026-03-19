@@ -21,7 +21,7 @@ const {
   getPersistedQualification
 } = require("../server/jobStore");
 const { processExtractionJob, createExtractionDraftFromText } = require("../server/extractionService");
-const { closeDatabaseForTests } = require("../server/database");
+const { closeDatabaseForTests } = require("../server/databaseStore");
 
 const sampleQualificationText = `
 Pearson BTEC Level 3 National Extended Diploma in Business
@@ -58,6 +58,31 @@ function createReviewJob() {
   });
   const financeUnit = draft.qualification.children[0].children.find((child) => child.title === "Unit 3: Personal and Business Finance");
   const optionalUnit = draft.qualification.children[1].children[0];
+
+  financeUnit.children.push({
+    id: "learning-outcome-1",
+    kind: "Learning Outcome",
+    title: "Learning Outcome 1",
+    summary: "Understand the purpose of personal finance",
+    confidence: 90,
+    fields: {
+      description: "Understand the purpose of personal finance"
+    },
+    children: [
+      {
+        id: "criterion-pass-1",
+        kind: "Assessment Criterion",
+        title: "Pass Criterion 1",
+        summary: "Describe different financial products",
+        confidence: 89,
+        fields: {
+          gradeLevel: "Pass",
+          description: "Describe different financial products available to consumers"
+        },
+        children: []
+      }
+    ]
+  });
 
   draft.reviewReady = false;
   draft.confidence = 82;
@@ -174,10 +199,131 @@ test("approveJob persists only after review is ready", () => {
   assert.ok(detail.units.length >= 2);
   assert.ok(detail.unitGroups.length >= 1);
   assert.ok(detail.unitGroupMembers.length >= 2);
+  assert.ok(detail.learningOutcomes.length >= 1);
+  assert.ok(detail.assessmentCriteria.length >= 1);
   assert.ok(detail.gradeSchemes.length >= 1);
   assert.ok(detail.gradeOptions.length >= 3);
   assert.ok(detail.ruleSets.length >= 2);
   assert.ok(detail.ruleSetMembers.length >= 3);
+});
+
+test("approveJob persists multiple qualifications from one job and reuses shared units", () => {
+  const created = createUploadedJob("BTEC_Level1_and_Level2_Vehicle_Technology.pdf");
+  const sharedUnit = {
+    id: "unit-shared-1",
+    kind: "Unit",
+    title: "Unit 1: Vehicle Systems Basics",
+    summary: "Reference V/100/1001, GLH 60, internally assessed",
+    confidence: 95,
+    fields: {
+      unitNumber: "Unit 1",
+      reference: "V/100/1001",
+      glh: "60",
+      creditValue: "10",
+      assessmentType: "Internal",
+      gradeScheme: "Pass / Merit / Distinction",
+      gradingScheme: "Pass / Merit / Distinction"
+    },
+    children: []
+  };
+
+  const qualificationOne = {
+    id: "qualification-level-1",
+    kind: "Qualification",
+    title: "Pearson BTEC Level 1 Certificate in Vehicle Technology",
+    summary: "Level 1 qualification",
+    confidence: 95,
+    fields: {
+      qualificationName: "Pearson BTEC Level 1 Certificate in Vehicle Technology",
+      code: "601/0001/1",
+      type: "Certificate",
+      qualificationType: "Certificate",
+      level: "Level 1",
+      awardingBody: "Pearson",
+      sizeGlh: "180",
+      sizeCredits: "18",
+      gradingScheme: "Pass / Merit / Distinction"
+    },
+    children: [
+      {
+        id: "group-level-1-mandatory",
+        kind: "Unit Group",
+        title: "Mandatory Units",
+        summary: "All listed units must be completed",
+        confidence: 95,
+        fields: {
+          groupType: "Mandatory",
+          selectionRule: "All listed units must be completed",
+          minimumUnits: "0",
+          ruleSet: "All listed units must be completed"
+        },
+        children: [sharedUnit]
+      }
+    ]
+  };
+
+  const qualificationTwo = {
+    id: "qualification-level-2",
+    kind: "Qualification",
+    title: "Pearson BTEC Level 2 Diploma in Vehicle Technology",
+    summary: "Level 2 qualification",
+    confidence: 95,
+    fields: {
+      qualificationName: "Pearson BTEC Level 2 Diploma in Vehicle Technology",
+      code: "601/0002/2",
+      type: "Diploma",
+      qualificationType: "Diploma",
+      level: "Level 2",
+      awardingBody: "Pearson",
+      sizeGlh: "360",
+      sizeCredits: "36",
+      gradingScheme: "Pass / Merit / Distinction"
+    },
+    children: [
+      {
+        id: "group-level-2-mandatory",
+        kind: "Unit Group",
+        title: "Mandatory Units",
+        summary: "All listed units must be completed",
+        confidence: 95,
+        fields: {
+          groupType: "Mandatory",
+          selectionRule: "All listed units must be completed",
+          minimumUnits: "0",
+          ruleSet: "All listed units must be completed"
+        },
+        children: [sharedUnit]
+      }
+    ]
+  };
+
+  const reviewJob = hydrateJobForReview(created.id, {
+    qualificationCode: "601/0001/1",
+    confidence: 95,
+    reviewReady: true,
+    pages: { current: 1, total: 20 },
+    documentFocus: { top: 20, height: 10, label: "Focus: qualification overview" },
+    qualification: qualificationOne,
+    qualifications: [qualificationOne, qualificationTwo],
+    sourceTextExcerpt: "Vehicle technology combined specification",
+    extractionMeta: {
+      provider: "fallback",
+      extractedAt: "2026-03-19T00:00:00.000Z",
+      parser: "test-fixture"
+    }
+  });
+
+  const approved = approveJob(reviewJob.id);
+  assert.equal(approved.status, "persisted");
+
+  const persisted = listPersistedQualifications().filter((item) => item.sourceJobId === reviewJob.id);
+  assert.equal(persisted.length, 2);
+
+  const firstDetail = getPersistedQualification(persisted[0].id);
+  const secondDetail = getPersistedQualification(persisted[1].id);
+  assert.equal(firstDetail.units.length, 1);
+  assert.equal(secondDetail.units.length, 1);
+  assert.equal(firstDetail.units[0].id, secondDetail.units[0].id);
 });
 
 test("reprocessJob resets a job back to processing", () => {
