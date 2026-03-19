@@ -289,12 +289,35 @@ jobs:
 
       - name: Deploy application package
         run: |
-          az webapp deploy \
+          for attempt in $(seq 1 3); do
+            if az webapp deploy \
+              --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
+              --name "${{ needs.infra.outputs.web_app_name }}" \
+              --src-path "$RUNNER_TEMP/qualsdemo.zip" \
+              --track-status false \
+              --type zip; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "Deployment failed after $attempt attempts." >&2
+              exit 1
+            fi
+
+            echo "Deploy attempt $attempt failed. Restarting web app before retrying." >&2
+            az webapp restart \
+              --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
+              --name "${{ needs.infra.outputs.web_app_name }}"
+            sleep 30
+          done
+
+      - name: Capture latest deployment logs on failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          az webapp log deployment show \
             --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
-            --name "${{ needs.infra.outputs.web_app_name }}" \
-            --src-path "$RUNNER_TEMP/qualsdemo.zip" \
-            --track-status false \
-            --type zip
+            --name "${{ needs.infra.outputs.web_app_name }}"
 
       - name: Smoke test health endpoint
         run: |
