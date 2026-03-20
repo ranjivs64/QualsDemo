@@ -57,7 +57,7 @@ inputs:
 
 ## Context
 
-The product must extract qualification structures from uploaded PDFs, display the extracted structure in a web application, support reviewer edits and reprocessing, and persist only approved structures through a newly created API and backing database. The target schema is defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md) and expanded in [PRD-1.md](../prd/PRD-1.md).
+The product must extract qualification structures from uploaded PDFs, display the extracted structure in a web application, support reviewer edits and reprocessing, and persist reviewer-confirmed structures through a newly created API and backing database. The current product direction requires the review experience to summarize how many qualifications were discovered in each specification, show the structure for every qualification found, support shared units reused across qualifications, and make hierarchy groups expandable and collapsible for navigation. The target schema is defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md) and expanded in [PRD-1.md](../prd/PRD-1.md).
 
 ### Requirements
 - Web application delivery surface.
@@ -83,10 +83,10 @@ The product must extract qualification structures from uploaded PDFs, display th
 
 This problem should use AI-assisted document understanding rather than a purely rule-based parser. Public product documentation for Azure Document Intelligence and Google Document AI both emphasize layout-aware extraction, table handling, document structure recognition, and structured output for semistructured documents. That aligns directly with qualification PDFs, which contain nested sections, units, groupings, and rule logic that are difficult to recover from plain OCR or regex alone.
 
-At the same time, the architecture should not depend on a free-form generative agent in the approval path. The correct phase 1 posture is hybrid:
+At the same time, the architecture should not depend on a free-form generative agent in the persistence path. The correct phase 1 posture is hybrid:
 - AI or document understanding for extraction.
-- Deterministic mapping and validation for schema alignment.
-- Human review for approval.
+- Deterministic mapping and structure summarization for schema alignment.
+- Human review for persistence.
 
 This keeps extraction quality high while containing hallucination risk and preserving auditability.
 
@@ -113,7 +113,7 @@ No neutral, publicly accessible benchmark in this workspace provides a trustwort
 
 | Failure mode | Evidence | Architectural response |
 |-------------|----------|------------------------|
-| Mis-extraction of nested groups and rules | Semistructured documents require layout-aware understanding, not plain text-only parsing. | Use layout-aware extraction plus deterministic schema mapping and validation. |
+| Mis-extraction of nested groups and rules | Semistructured documents require layout-aware understanding, not plain text-only parsing. | Use layout-aware extraction plus deterministic schema mapping and structure-first review summaries. |
 | File upload abuse or malicious content | OWASP unrestricted upload guidance highlights high risk and common exploitation patterns. | Isolate storage, allow-list file types, scan content, enforce retention, and require authenticated access. |
 | Provider quality drift | Model and provider outputs change over time. | Pin provider versions, evaluate against a fixed corpus, and track approval metrics. |
 | Interactive runtime instability in self-hosted open-source tools | Public issue histories show dependency and runtime instability. | Avoid open-source-first extraction path for phase 1. |
@@ -134,7 +134,7 @@ We will build a web-based, asynchronous, human-in-the-loop extraction platform c
 - a RESTful application API,
 - an extraction orchestration service,
 - a provider-adapter boundary for managed layout-aware document AI,
-- deterministic schema mapping and validation services,
+- deterministic schema mapping and review-summary enrichment services,
 - a relational system of record for approved qualification structures,
 - isolated object storage for uploaded PDFs and extracted payload artifacts,
 - and an auditable approval and submission workflow.
@@ -154,12 +154,12 @@ graph TD
  U[Reviewer] --> W[Web Review App]
  W --> A[Application API]
  A --> J[Job Orchestrator]
- A --> R[Review and Approval Service]
+ A --> R[Review and Persistence Service]
  J --> S[Secure Object Storage]
  J --> X[Extraction Provider Adapter]
  X --> P[Managed Document AI Provider]
  J --> M[Schema Mapping Service]
- M --> V[Validation Service]
+ M --> V[Structure Summary Service]
  R --> Q[Qualification Persistence API]
  Q --> D[(Relational Database)]
  R --> D
@@ -179,12 +179,12 @@ graph TD
 ### Option 1: Managed document AI plus deterministic mapping plus human review
 
 **Description**  
-Use a managed, layout-aware document understanding provider through an adapter. Map the extracted layout entities into the qualification schema, validate them deterministically, then require reviewer approval before API submission.
+Use a managed, layout-aware document understanding provider through an adapter. Map the extracted layout entities into the qualification schema, derive reviewer-facing structure summaries, then require reviewer confirmation before API submission.
 
 **Pros**
 - Strong fit for semistructured documents according to Azure and Google product documentation.
 - Supports future provider substitution because the rest of the platform depends on the adapter contract, not a single provider.
-- Keeps high-risk persistence decisions behind deterministic validation and human review.
+- Keeps persistence decisions behind deterministic normalization, explicit reviewer confirmation, and an API boundary.
 
 **Cons**
 - Introduces external provider cost and service dependency.
@@ -239,7 +239,7 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 1. **Semistructured document fit**: Managed layout-aware extraction directly matches the document characteristics described in the PRD and supported by researched provider documentation.  
    **Confidence: HIGH**
 
-2. **Controlled persistence**: The workflow can be AI-assisted without being AI-trusting. Deterministic validation and reviewer approval sit between extraction and persistence.  
+2. **Controlled persistence**: The workflow can be AI-assisted without being AI-trusting. Deterministic normalization, reviewer navigation, and explicit confirmation sit between extraction and persistence.  
    **Confidence: HIGH**
 
 3. **Relational persistence fit**: The qualification domain is centered on stable entity relationships such as one-to-many and many-to-many links across qualifications, units, groups, rule sets, and grade schemes. A relational model is the simplest defensible system of record.  
@@ -253,7 +253,7 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 
 ### Key decision factors
 - Extraction quality for semistructured documents
-- Auditability and approval safety
+- Auditability and reviewer safety
 - Time to production readiness
 - Long-term maintainability
 - Provider substitution flexibility
@@ -289,8 +289,8 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 
 ### High-level implementation plan
 1. Define the relational schema and persistence API contract for the qualification model.
-2. Build the asynchronous ingestion, extraction, mapping, and validation pipeline.
-3. Build the web review workspace with hierarchy visualization, source linkage, edit, reprocess, and approval flows.
+2. Build the asynchronous ingestion, extraction, mapping, and review-summary enrichment pipeline.
+3. Build the web review workspace with hierarchy visualization, discovered-qualification summaries, collapsible navigation, source linkage, edit, reprocess, and approval flows.
 4. Add audit, retention, monitoring, and provider evaluation controls.
 
 ### Key milestones
@@ -314,7 +314,7 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 ### Agent architecture pattern
 - Single extraction pipeline with deterministic post-processing
 - Human-in-the-loop review and approval
-- Hybrid architecture with AI-assisted extraction and deterministic validation
+- Hybrid architecture with AI-assisted extraction and deterministic normalization
 
 ### Inference pipeline
 
@@ -323,7 +323,7 @@ graph LR
  A[Uploaded PDF] --> B[Secure validation and storage]
  B --> C[Layout-aware extraction]
  C --> D[Schema mapping]
- D --> E[Deterministic validation]
+ D --> E[Structure summarization]
  E --> F[Reviewer workspace]
  F --> G[Approve]
  F --> H[Edit]
@@ -349,7 +349,7 @@ graph LR
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Layout model misses nested rule logic | High | Deterministic validation and reviewer gating |
+| Layout model misses nested rule logic | High | Structure-first review, collapsible hierarchy navigation, and reviewer confirmation |
 | Provider output drift | Medium | Version pinning, evaluation corpus, release gate |
 | Confidence misinterpreted as correctness | Medium | Advisory-only confidence labels and approval gate |
 | Provider outage | Medium | Retries, job state retention, adapter boundary for substitution |

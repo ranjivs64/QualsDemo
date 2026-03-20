@@ -464,10 +464,8 @@ select:focus-visible {
 .job-card-side,
 .history-filters,
 .inspector-actions,
-.override-actions,
 .detail-header-badges,
 .tree-badges,
-.validation-stats,
 .detail-meta-grid,
 .approval-metrics,
 .source-columns {
@@ -506,7 +504,6 @@ select:focus-visible {
 .job-list,
 .hierarchy-tree,
 .tree-children,
-.validation-list,
 .inspector-content,
 .approval-panel {
   display: grid;
@@ -633,35 +630,29 @@ select:focus-visible {
   margin-bottom: 16px;
 }
 
-.validation-empty {
-  padding: 16px;
-  border-radius: var(--radius-sm);
-  background: var(--neutral-bg);
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.validation-empty.is-success {
-  background: var(--success-bg);
-  color: var(--success);
-}
-
-.validation-item {
+.summary-grid {
   display: grid;
-  gap: 4px;
-  width: 100%;
-  text-align: left;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
   padding: 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(244, 237, 227, 0.72);
 }
 
-.validation-item.is-blocker {
-  border-color: rgba(180, 35, 24, 0.28);
-  background: linear-gradient(180deg, #fff, #fef4f3);
+.summary-card span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
-.validation-item.is-warning {
-  border-color: rgba(180, 83, 9, 0.24);
-  background: linear-gradient(180deg, #fff, #fff8ef);
+.summary-card strong {
+  font-size: 1.25rem;
 }
 
 .qualification-tabs {
@@ -695,6 +686,36 @@ select:focus-visible {
   font-size: 0.86rem;
 }
 
+.tree-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.tree-toggle {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.tree-toggle-spacer {
+  width: 36px;
+  height: 36px;
+}
+
+.tree-toggle-icon {
+  display: inline-block;
+  line-height: 1;
+}
+
 .tree-card {
   width: 100%;
   padding: 16px;
@@ -714,6 +735,10 @@ select:focus-visible {
 .tree-children {
   padding-left: 18px;
   border-left: 2px solid rgba(184, 159, 131, 0.24);
+}
+
+.tree-children.is-collapsed {
+  display: none;
 }
 
 .detail-header,
@@ -903,7 +928,8 @@ select {
 
   .detail-meta-grid,
   .approval-metrics,
-  .source-columns {
+  .source-columns,
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 

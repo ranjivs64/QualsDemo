@@ -221,27 +221,14 @@ test("serves the updated live review workspace shell", async () => {
   assert.match(html, /id="approvalPanel"/);
 });
 
-test("supports approval override through the real HTTP API", async () => {
+test("supports structure-first approval through the real HTTP API", async () => {
   const jobsResponse = await fetchJson(`${baseUrl}/api/v1/jobs`);
   const job = jobsResponse.items.find((item) => item.fileName === "BTEC_Business_Family_2026.pdf");
 
   assert.ok(job);
   assert.equal(job.validationSummary.counts.qualifications, 2);
   assert.equal(job.validationSummary.counts.sharedUnits, 1);
-  assert.ok(job.validationSummary.counts.blockers >= 1);
-  assert.equal(job.reviewReady, false);
-
-  const overrideResponse = await fetchJson(`${baseUrl}/api/v1/jobs/${job.id}/approval-override`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      enabled: true,
-      rationale: "Analyst confirmed the source and approved the remaining blocker by policy."
-    })
-  });
-
-  assert.equal(overrideResponse.item.approvalOverride.enabled, true);
-  assert.equal(overrideResponse.item.reviewReady, true);
+  assert.equal(job.reviewReady, true);
 
   const approvedResponse = await fetchJson(`${baseUrl}/api/v1/jobs/${job.id}/approve`, {
     method: "POST",

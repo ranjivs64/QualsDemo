@@ -300,14 +300,11 @@ async function handleApi(req, res, pathname, searchParams) {
       return;
     }
     if (!job.reviewReady) {
-      const blockerCount = job.validationSummary && job.validationSummary.counts ? job.validationSummary.counts.blockers : 0;
       sendProblem(
         res,
         409,
         "Conflict",
-        blockerCount > 0
-          ? `Job cannot be approved while ${blockerCount} validation blocker${blockerCount === 1 ? " remains" : "s remain"}.`
-          : "Job cannot be approved until review requirements are satisfied."
+        "Job cannot be approved until extraction has produced at least one qualification structure for review."
       );
       return;
     }

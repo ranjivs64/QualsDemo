@@ -8,6 +8,7 @@
     selectedJobId: null,
     selectedQualificationId: null,
     selectedNodeId: null,
+    collapsedNodeIds: {},
     refreshTimer: null,
     isBusy: false
   };
@@ -207,8 +208,6 @@
 
     jobs.forEach((job) => {
       const counts = getCounts(job);
-      const blockers = counts.blockers;
-      const warnings = counts.warnings;
       const actionLabel = job.status === "persisted" ? "View" : job.status === "processing" ? "Track" : "Review";
       const card = document.createElement("article");
       card.className = "job-card";
@@ -217,7 +216,7 @@
           <div class="job-icon" aria-hidden="true"></div>
           <div>
             <h4 class="job-name">${escapeHtml(job.fileName)}</h4>
-            <p class="job-meta">${escapeHtml(getStatusLabel(job.status))} | ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"} | ${blockers} blocker${blockers === 1 ? "" : "s"} | ${warnings} warning${warnings === 1 ? "" : "s"}</p>
+            <p class="job-meta">${escapeHtml(getStatusLabel(job.status))} | ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} discovered | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"}</p>
             <p class="job-meta">Confidence ${job.confidence || 0}% | Attempt ${job.attempts} | Source ${escapeHtml(describeExtractionSource(job))} | Updated ${escapeHtml(formatDate(job.updatedAt))}</p>
           </div>
         </div>
@@ -261,12 +260,12 @@
   function renderReview() {
     const job = getSelectedJob();
     if (!job) {
-      elements.reviewSubtitle.textContent = "Select a job from the queue to inspect qualification structure and validation state.";
+      elements.reviewSubtitle.textContent = "Select a job from the queue to inspect the discovered qualification structures.";
       elements.pageBadge.textContent = "Awaiting review";
       elements.reviewStatusBadge.className = "badge badge-neutral";
       elements.reviewStatusBadge.textContent = "No job selected";
       elements.documentCanvas.innerHTML = "<div class=\"empty-state\"><h4>No document selected</h4><p>Choose a job from Extract or History to open the review workspace.</p></div>";
-      elements.validationRail.innerHTML = "<div class=\"validation-empty\">Validation items appear here once a review job is opened.</div>";
+      elements.validationRail.innerHTML = "<div class=\"empty-state\"><h4>No specification summary</h4><p>A structure summary appears here once a review job is opened.</p></div>";
       elements.qualificationTabs.innerHTML = "";
       elements.hierarchyTree.innerHTML = "<div class=\"empty-state\"><h4>No hierarchy available</h4><p>The structure tree will populate after extraction finishes.</p></div>";
       elements.inspectorContent.className = "inspector-content empty-state";
@@ -286,7 +285,7 @@
     const selectedNode = getSelectedNode(job, selectedQualification);
     const counts = getCounts(job);
 
-    elements.reviewSubtitle.textContent = `${job.fileName} | ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"} | Source ${describeExtractionSource(job)}`;
+    elements.reviewSubtitle.textContent = `${job.fileName} | Discovered ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} in this specification | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"} | Source ${describeExtractionSource(job)}`;
     elements.pageBadge.textContent = job.pages ? `Page ${job.pages.current} of ${job.pages.total}` : "Page pending";
     setReviewBadge(job);
     renderDocumentPanel(job, selectedNode);
@@ -335,43 +334,37 @@
   }
 
   function renderValidationRail(job) {
-    const summary = job.validationSummary || { blockers: [], warnings: [] };
-    const items = [...summary.blockers, ...summary.warnings];
-
-    if (!items.length) {
-      elements.validationRail.innerHTML = "<div class=\"validation-empty is-success\">Validation passed. This review can be persisted without additional intervention.</div>";
-      return;
-    }
-
+    const summary = job.validationSummary || { counts: getCounts(job) };
     elements.validationRail.innerHTML = `
       <div class="validation-summary-head">
         <div>
-          <p class="panel-kicker">Validation summary</p>
-          <h4>${summary.counts.blockers} blocker${summary.counts.blockers === 1 ? "" : "s"}, ${summary.counts.warnings} warning${summary.counts.warnings === 1 ? "" : "s"}</h4>
+          <p class="panel-kicker">Specification summary</p>
+          <h4>${summary.counts.qualifications} qualification${summary.counts.qualifications === 1 ? "" : "s"} discovered</h4>
         </div>
-        <div class="validation-stats">
-          <span>${summary.counts.qualifications} qualifications</span>
-          <span>${summary.counts.sharedUnits} shared units</span>
+        <div class="tree-badges">
+          ${createBadgeMarkup(`${summary.counts.sharedUnits} shared unit${summary.counts.sharedUnits === 1 ? "" : "s"}`, "badge-neutral")}
+          ${createBadgeMarkup(`${summary.counts.units} unit${summary.counts.units === 1 ? "" : "s"}`, "badge-neutral")}
         </div>
       </div>
-      <div class="validation-list">
-        ${items.map((item) => `
-          <button class="validation-item ${item.severity === "blocker" ? "is-blocker" : "is-warning"}" type="button" data-node-id="${escapeAttribute(item.nodeId)}" data-qualification-id="${escapeAttribute(item.qualificationId)}">
-            <span class="validation-item-kind">${escapeHtml(item.severity)}</span>
-            <strong>${escapeHtml(item.nodeTitle)}</strong>
-            <span>${escapeHtml(item.detail)}</span>
-          </button>
-        `).join("")}
+      <div class="summary-grid">
+        <div class="summary-card">
+          <span>Units</span>
+          <strong>${summary.counts.units}</strong>
+        </div>
+        <div class="summary-card">
+          <span>Learning outcomes</span>
+          <strong>${summary.counts.learningOutcomes}</strong>
+        </div>
+        <div class="summary-card">
+          <span>Assessment criteria</span>
+          <strong>${summary.counts.assessmentCriteria}</strong>
+        </div>
+        <div class="summary-card">
+          <span>Ready to persist</span>
+          <strong>${job.status === "review" ? "Yes" : "After extraction"}</strong>
+        </div>
       </div>
     `;
-
-    elements.validationRail.querySelectorAll(".validation-item").forEach((button) => {
-      button.addEventListener("click", () => {
-        state.selectedQualificationId = button.dataset.qualificationId;
-        state.selectedNodeId = button.dataset.nodeId;
-        renderReview();
-      });
-    });
   }
 
   function renderQualificationTabs(job) {
@@ -381,16 +374,15 @@
       return;
     }
 
-    const blockerIndex = buildIssueCountIndex(job.validationSummary && job.validationSummary.blockers ? job.validationSummary.blockers : []);
-    const warningIndex = buildIssueCountIndex(job.validationSummary && job.validationSummary.warnings ? job.validationSummary.warnings : []);
-
     elements.qualificationTabs.innerHTML = qualifications.map((qualification) => {
-      const blockers = blockerIndex.get(qualification.id) || 0;
-      const warnings = warningIndex.get(qualification.id) || 0;
+      const code = qualification.fields && (qualification.fields.code || qualification.fields.qualificationCode)
+        ? (qualification.fields.code || qualification.fields.qualificationCode)
+        : "Code pending";
+      const groupCount = (qualification.children || []).length;
       return `
         <button class="qualification-tab ${qualification.id === state.selectedQualificationId ? "is-active" : ""}" type="button" role="tab" aria-selected="${qualification.id === state.selectedQualificationId ? "true" : "false"}" data-qualification-id="${escapeAttribute(qualification.id)}">
           <span class="qualification-tab-title">${escapeHtml(qualification.title)}</span>
-          <span class="qualification-tab-meta">${blockers} blocker${blockers === 1 ? "" : "s"} | ${warnings} warning${warnings === 1 ? "" : "s"}</span>
+          <span class="qualification-tab-meta">${escapeHtml(code)} | ${groupCount} group${groupCount === 1 ? "" : "s"}</span>
         </button>
       `;
     }).join("");
@@ -407,18 +399,43 @@
   function renderTree(job, qualification) {
     elements.hierarchyTree.innerHTML = "";
     if (!qualification) {
-      elements.hierarchyTree.innerHTML = "<div class=\"empty-state\"><h4>Extraction is still running</h4><p>The hierarchy appears here once mapping and validation complete.</p></div>";
+      elements.hierarchyTree.innerHTML = "<div class=\"empty-state\"><h4>Extraction is still running</h4><p>The hierarchy appears here once mapping completes.</p></div>";
       return;
     }
 
-    const issueIndex = buildNodeIssueIndex(job);
     const sharedUnitIndex = buildSharedUnitIndex(job);
-    elements.hierarchyTree.appendChild(createTreeNode(qualification, issueIndex, sharedUnitIndex));
+    elements.hierarchyTree.appendChild(createTreeNode(qualification, sharedUnitIndex));
   }
 
-  function createTreeNode(node, issueIndex, sharedUnitIndex) {
+  function createTreeNode(node, sharedUnitIndex) {
     const wrapper = document.createElement("div");
     wrapper.className = "tree-node";
+    wrapper.dataset.nodeId = node.id;
+
+    const row = document.createElement("div");
+    row.className = "tree-row";
+
+    const hasChildren = Boolean(node.children && node.children.length);
+    const isCollapsed = Boolean(state.collapsedNodeIds[node.id]);
+
+    if (hasChildren) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "tree-toggle";
+      toggle.setAttribute("aria-expanded", String(!isCollapsed));
+      toggle.setAttribute("aria-label", `${isCollapsed ? "Expand" : "Collapse"} ${node.title}`);
+      toggle.innerHTML = `<span class="tree-toggle-icon">${isCollapsed ? "+" : "-"}</span>`;
+      toggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        state.collapsedNodeIds[node.id] = !state.collapsedNodeIds[node.id];
+        renderReview();
+      });
+      row.appendChild(toggle);
+    } else {
+      const spacer = document.createElement("div");
+      spacer.className = "tree-toggle-spacer";
+      row.appendChild(spacer);
+    }
 
     const card = document.createElement("button");
     card.type = "button";
@@ -428,7 +445,6 @@
         <span class="tree-kind">${escapeHtml(node.kind)}</span>
         <div class="tree-badges">
           ${createBadgeMarkup(confidenceLabel(node), confidenceVariant(node.confidence || 0))}
-          ${issueIndex.has(node.id) ? createBadgeMarkup(issueIndex.get(node.id).label, issueIndex.get(node.id).variant) : ""}
           ${sharedUnitIndex.has(node.id) ? createBadgeMarkup(`Shared ${sharedUnitIndex.get(node.id).count}x`, "badge-neutral") : ""}
         </div>
       </div>
@@ -439,13 +455,15 @@
       state.selectedNodeId = node.id;
       renderReview();
     });
-    wrapper.appendChild(card);
+    row.appendChild(card);
+    wrapper.appendChild(row);
 
-    if (node.children && node.children.length) {
+    if (hasChildren) {
       const children = document.createElement("div");
-      children.className = "tree-children";
+      children.className = `tree-children ${isCollapsed ? "is-collapsed" : ""}`;
+      children.dataset.parentNodeId = node.id;
       node.children.forEach((child) => {
-        children.appendChild(createTreeNode(child, issueIndex, sharedUnitIndex));
+        children.appendChild(createTreeNode(child, sharedUnitIndex));
       });
       wrapper.appendChild(children);
     }
@@ -475,7 +493,6 @@
           </div>
           <div class="detail-header-badges">
             ${createBadgeMarkup(confidenceLabel(node), confidenceVariant(node.confidence || 0))}
-            ${node.needsAttention ? createBadgeMarkup("Needs review", "badge-danger") : ""}
           </div>
         </div>
         <div class="detail-meta-grid">
@@ -512,9 +529,8 @@
         </div>
       ` : ""}
       <div class="inspector-block">
-        <p class="inspector-note">${escapeHtml(node.guidance || "No active guidance for this node.")}</p>
+        <p class="inspector-note">${escapeHtml(node.guidance || "Review the extracted fields and source context before persisting.")}</p>
         <div class="inspector-actions">
-          ${job.status === "review" ? "<button class=\"primary-button\" id=\"verifyNodeButton\" type=\"button\">Verify node</button>" : ""}
           <button class="secondary-button" id="focusNodeButton" type="button">Highlight source</button>
           ${job.artifact ? "<button class=\"secondary-button\" id=\"openArtifactButton\" type=\"button\">Open uploaded PDF</button>" : ""}
         </div>
@@ -533,11 +549,6 @@
       });
     });
 
-    const verifyButton = document.getElementById("verifyNodeButton");
-    if (verifyButton) {
-      verifyButton.addEventListener("click", () => void verifyNode(job.id, node.id));
-    }
-
     document.getElementById("focusNodeButton").addEventListener("click", () => {
       renderDocumentPanel(job, node);
       pushToast("Source linked", `${node.title} is now focused in the document panel.`);
@@ -552,19 +563,11 @@
   }
 
   function renderApprovalPanel(job) {
-    const summary = job.validationSummary || { counts: { blockers: 0, warnings: 0, sharedUnits: 0, learningOutcomes: 0, assessmentCriteria: 0 } };
-    const override = job.approvalOverride || { enabled: false, rationale: "" };
-    const overrideReady = override.enabled && override.rationale.trim().length >= 12;
-    const approvalHeadline = job.reviewReady
-      ? overrideReady && summary.counts.blockers > 0
-        ? "Override ready"
-        : "Ready to persist"
-      : "Blocked by validation";
+    const summary = job.validationSummary || { counts: getCounts(job) };
+    const approvalHeadline = job.reviewReady ? "Ready to persist" : "Waiting for extraction";
     const approvalCopy = job.reviewReady
-      ? overrideReady && summary.counts.blockers > 0
-        ? "A policy override is saved, so approval can proceed while blockers remain documented."
-        : "All blocking validation issues are cleared."
-      : `${summary.counts.blockers} blocker${summary.counts.blockers === 1 ? " remains" : "s remain"} before approval.`;
+      ? "Review the discovered qualification structures, expand the groups you need, and persist when ready."
+      : "Persistence becomes available after extraction finishes and at least one qualification structure is available.";
 
     elements.approvalPanel.innerHTML = `
       <div class="approval-card">
@@ -577,42 +580,17 @@
         </div>
         <p class="muted">${escapeHtml(approvalCopy)}</p>
         <div class="approval-metrics">
-          <div><span>Blockers</span><strong>${summary.counts.blockers}</strong></div>
-          <div><span>Warnings</span><strong>${summary.counts.warnings}</strong></div>
+          <div><span>Qualifications</span><strong>${summary.counts.qualifications}</strong></div>
           <div><span>Shared units</span><strong>${summary.counts.sharedUnits}</strong></div>
+          <div><span>Units</span><strong>${summary.counts.units}</strong></div>
           <div><span>Criteria</span><strong>${summary.counts.assessmentCriteria}</strong></div>
         </div>
-        <label class="override-toggle">
-          <input id="overrideEnabled" type="checkbox" ${override.enabled ? "checked" : ""}>
-          <span>Allow policy override</span>
-        </label>
-        <label class="override-reason-label" for="overrideReason">Override rationale</label>
-        <textarea id="overrideReason" rows="4" ${override.enabled ? "" : "disabled"} placeholder="Document why approval can proceed despite unresolved blockers.">${escapeHtml(override.rationale)}</textarea>
-        <div class="override-actions">
-          <button class="secondary-button" id="saveOverrideButton" type="button">Save override</button>
-          ${override.updatedAt ? `<span class="override-stamp">Saved ${escapeHtml(formatDate(override.updatedAt))}</span>` : ""}
+        <div class="inspector-actions">
+          <span class="badge badge-neutral">${summary.counts.learningOutcomes} learning outcome${summary.counts.learningOutcomes === 1 ? "" : "s"}</span>
+          <span class="badge badge-neutral">${summary.counts.assessmentCriteria} assessment criteria</span>
         </div>
       </div>
     `;
-
-    const enabledInput = document.getElementById("overrideEnabled");
-    const reasonInput = document.getElementById("overrideReason");
-    const saveButton = document.getElementById("saveOverrideButton");
-
-    enabledInput.addEventListener("change", () => {
-      reasonInput.disabled = !enabledInput.checked;
-      if (!enabledInput.checked) {
-        reasonInput.value = "";
-      }
-    });
-
-    saveButton.addEventListener("click", async () => {
-      try {
-        await saveApprovalOverride(job.id, enabledInput.checked, reasonInput.value);
-      } catch (error) {
-        pushToast("Override failed", error.message || "Unable to save the approval override.");
-      }
-    });
   }
 
   function setReviewBadge(job) {
@@ -674,7 +652,7 @@
       return;
     }
     if (!job.reviewReady) {
-      pushToast("Review incomplete", "Clear the remaining blockers or save a valid override before approval.");
+      pushToast("Review unavailable", "Wait for extraction to finish before persisting the discovered structures.");
       return;
     }
 
@@ -802,8 +780,7 @@
     }
 
     if (!selected) {
-      const firstValidation = findFirstIssueNode(job, qualification.id);
-      selected = firstValidation ? findNodeById(qualification, firstValidation.nodeId) : qualification;
+      selected = qualification;
       state.selectedNodeId = selected ? selected.id : null;
     }
 
@@ -857,31 +834,22 @@
   }
 
   function getReviewStateLabel(job) {
-    const counts = getCounts(job);
-    const overrideReady = Boolean(job.approvalOverride && job.approvalOverride.enabled && job.approvalOverride.rationale && job.approvalOverride.rationale.trim().length >= 12);
-
     if (job.status === "persisted") {
       return "Persisted";
     }
     if (job.status === "processing") {
       return "Processing";
     }
-    if (job.reviewReady && overrideReady && counts.blockers > 0) {
-      return "Override ready";
-    }
     if (job.reviewReady) {
       return "Ready to persist";
     }
-    return "Needs validation";
+    return "Review pending";
   }
 
   function getReviewStateVariant(job) {
     const label = getReviewStateLabel(job);
-    if (label === "Persisted" || label === "Ready to persist" || label === "Override ready") {
+    if (label === "Persisted" || label === "Ready to persist") {
       return "badge-success";
-    }
-    if (label === "Needs validation") {
-      return "badge-danger";
     }
     return "badge-neutral";
   }
@@ -1059,7 +1027,7 @@
       elements.progressTitle.textContent = title || "Processing";
       elements.progressPercent.textContent = "Queued";
       elements.progressFill.style.width = "65%";
-      elements.progressStep.textContent = "The server is resolving qualifications, shared units, and validation blockers.";
+      elements.progressStep.textContent = "The server is resolving qualifications, shared units, and nested structure for review.";
       return;
     }
     elements.progressTitle.textContent = "Analyzing document";

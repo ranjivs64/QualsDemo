@@ -134,24 +134,8 @@ function buildSharedUnitSummary(qualifications) {
     }));
 }
 
-function createValidationItem(severity, node, qualificationId, qualificationTitle, detail) {
-  return {
-    id: `${severity}-${qualificationId}-${node.id}`,
-    severity,
-    nodeId: node.id,
-    nodeKind: node.kind,
-    nodeTitle: node.title,
-    qualificationId,
-    qualificationTitle,
-    detail,
-    focus: node.focus || null
-  };
-}
-
 function deriveValidationSummary(job) {
   const qualifications = getQualifications(job);
-  const blockers = [];
-  const warnings = [];
   const counts = {
     qualifications: qualifications.length,
     units: 0,
@@ -175,7 +159,7 @@ function deriveValidationSummary(job) {
   counts.sharedUnits = sharedUnits.length;
 
   for (const qualification of qualifications) {
-    walkNode(qualification, (node, qualificationId, qualificationTitle) => {
+    walkNode(qualification, (node) => {
       if (node.kind === "Unit") {
         counts.units += 1;
       }
@@ -187,48 +171,17 @@ function deriveValidationSummary(job) {
       }
 
       const pendingFields = Object.entries(node.fields || {})
-        .filter(([, value]) => hasPendingValue(value))
-        .map(([field]) => field);
+        .filter(([, value]) => hasPendingValue(value));
 
-      const lowConfidence = typeof node.confidence === "number" && node.confidence < 80;
-      const mediumConfidence = typeof node.confidence === "number" && node.confidence >= 80 && node.confidence < 90;
-
-      if (node.needsAttention || lowConfidence) {
-        const detail = pendingFields.length
-          ? `Pending fields: ${pendingFields.join(", ")}`
-          : node.guidance || `Confidence ${node.confidence || 0}% requires review.`;
-        blockers.push(createValidationItem("blocker", node, qualificationId, qualificationTitle, detail));
-        return;
-      }
-
-      if (pendingFields.length || mediumConfidence) {
-        const detail = pendingFields.length
-          ? `Check extracted fields: ${pendingFields.join(", ")}`
-          : `Confidence ${node.confidence || 0}% suggests manual review.`;
-        warnings.push(createValidationItem("warning", node, qualificationId, qualificationTitle, detail));
-      }
-
-      if (node.kind === "Unit Group") {
-        const minimumUnits = Number(node.fields && node.fields.minimumUnits ? node.fields.minimumUnits : 0);
-        if (Number.isFinite(minimumUnits) && minimumUnits > (node.children || []).length) {
-          blockers.push(createValidationItem(
-            "blocker",
-            node,
-            qualificationId,
-            qualificationTitle,
-            `Selection rule requires at least ${minimumUnits} units but only ${(node.children || []).length} were extracted.`
-          ));
-        }
+      if (pendingFields.length && typeof node.confidence === "number") {
+        node.confidence = Math.max(node.confidence, 75);
       }
     }, qualification.id, qualification.title);
   }
 
-  counts.blockers = blockers.length;
-  counts.warnings = warnings.length;
-
   return {
-    blockers,
-    warnings,
+    blockers: [],
+    warnings: [],
     sharedUnits,
     counts
   };
@@ -244,12 +197,10 @@ function synchronizeJobState(job) {
   job.qualification = qualifications[0] || null;
 
   const validationSummary = deriveValidationSummary(job);
-  const approvalOverride = getApprovalOverride(job);
-
   if (job.status === "processing") {
     job.reviewReady = false;
   } else if (job.status !== "persisted") {
-    job.reviewReady = validationSummary.blockers.length === 0 || isOverrideReady(approvalOverride);
+    job.reviewReady = qualifications.length > 0;
   }
 
   if ((!job.qualificationCode || job.qualificationCode === "Pending") && job.qualification && job.qualification.fields) {

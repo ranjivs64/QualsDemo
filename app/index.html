@@ -32,11 +32,11 @@
       <section class="view is-active" id="view-dashboard" aria-labelledby="dashboard-title">
         <div class="hero-panel">
           <div>
-            <p class="eyebrow">Upload -> Extract -> Validate -> Persist</p>
+            <p class="eyebrow">Upload -> Extract -> Review -> Persist</p>
             <h2 id="dashboard-title">Review complex qualification packs without losing structure</h2>
             <p class="hero-copy">
-              Upload one specification or a combined pack, inspect extracted qualifications, review shared units,
-              outcomes, criteria, and validation blockers, then persist only approved data.
+              Upload one specification or a combined pack, inspect every discovered qualification,
+              review its groups and nested entities, then persist the approved structure.
             </p>
           </div>
           <div class="hero-metrics" id="heroMetrics"></div>
@@ -98,7 +98,7 @@
           <div>
             <p class="panel-kicker">Human-in-the-loop review</p>
             <h2 id="review-title">Qualification review workspace</h2>
-            <p class="muted" id="reviewSubtitle">Select a job from the queue to inspect qualification structure and validation state.</p>
+            <p class="muted" id="reviewSubtitle">Select a job from the queue to inspect the discovered qualification structures.</p>
           </div>
           <div class="review-actions">
             <button class="secondary-button" id="reprocessButton" type="button">Reprocess</button>
@@ -122,9 +122,9 @@
             <div class="panel-header compact">
               <div>
                 <p class="panel-kicker">Extracted Structure</p>
-                <h3 id="hierarchy-title">Validation and hierarchy</h3>
+                <h3 id="hierarchy-title">Specification summary and hierarchy</h3>
               </div>
-              <span class="badge" id="reviewStatusBadge">Needs validation</span>
+              <span class="badge" id="reviewStatusBadge">Ready to review</span>
             </div>
             <div class="validation-rail" id="validationRail"></div>
             <div class="qualification-tabs" id="qualificationTabs" role="tablist" aria-label="Qualifications"></div>
@@ -135,7 +135,7 @@
             <div class="panel-header compact">
               <div>
                 <p class="panel-kicker">Selected Node</p>
-                <h3 id="inspector-title">Detail and approval</h3>
+                <h3 id="inspector-title">Detail and persistence</h3>
               </div>
             </div>
             <div id="inspectorContent" class="inspector-content empty-state">

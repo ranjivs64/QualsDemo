@@ -15,7 +15,6 @@ const {
   getJob,
   updateNodeField,
   verifyNode,
-  updateApprovalOverride,
   approveJob,
   reprocessJob,
   listPersistedQualifications,
@@ -135,7 +134,7 @@ test("hydrateJobForReview moves a processing job into review with qualification 
   const job = hydrateJobForReview(created.id, created.fileName);
   assert.equal(job.status, "review");
   assert.equal(job.qualification.kind, "Qualification");
-  assert.equal(job.reviewReady, false);
+  assert.equal(job.reviewReady, true);
 });
 
 test("processExtractionJob uses fallback extraction when AI is not configured", async () => {
@@ -176,7 +175,14 @@ test("updateNodeField updates a node field value", () => {
   assert.equal(updated.qualification.children[0].children[1].fields.glh, "120");
 });
 
-test("verifyNode marks the review job ready for persistence", () => {
+test("review jobs are ready for persistence once structure exists", () => {
+  const reviewJob = createReviewJob();
+  assert.equal(reviewJob.reviewReady, true);
+  assert.equal(reviewJob.validationSummary.counts.qualifications, 1);
+  assert.equal(reviewJob.validationSummary.counts.sharedUnits, 0);
+});
+
+test("verifyNode still normalizes extracted field values", () => {
   const reviewJob = createReviewJob();
   const updated = verifyNode(reviewJob.id, "unit-3");
   assert.equal(updated.reviewReady, true);
@@ -408,17 +414,11 @@ test("updateNodeField updates shared units across linked qualifications", () => 
 
   assert.equal(updated.qualifications[0].children[0].children[0].fields.glh, "60");
   assert.equal(updated.qualifications[1].children[0].children[0].fields.glh, "60");
-  assert.equal(updated.validationSummary.counts.blockers, 0);
+  assert.equal(updated.reviewReady, true);
 });
 
-test("approval override enables approval when blockers remain and rationale satisfies policy", () => {
+test("approveJob persists reviewed structures without validation gating", () => {
   const reviewJob = createReviewJob();
-  const overrideUpdated = updateApprovalOverride(reviewJob.id, true, "Source scan is clear and policy allows manual approval.");
-
-  assert.equal(overrideUpdated.approvalOverride.enabled, true);
-  assert.ok(overrideUpdated.approvalOverride.rationale.length >= 12);
-  assert.equal(overrideUpdated.reviewReady, true);
-
   const approved = approveJob(reviewJob.id);
   assert.equal(approved.status, "persisted");
 });

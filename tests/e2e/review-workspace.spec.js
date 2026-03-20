@@ -214,17 +214,26 @@ test.describe("review workspace", () => {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
 
-  test("supports qualification switching and approval override in the browser", async ({ page }) => {
+  test("supports qualification switching, collapsible groups, and persistence in the browser", async ({ page }) => {
     await page.goto(baseUrl);
 
     await page.getByRole("button", { name: "Open next review" }).click();
 
     await expect(page.getByRole("heading", { name: "Qualification review workspace" })).toBeVisible();
     await expect(page.locator("#qualificationTabs [role='tab']")).toHaveCount(2);
+    await expect(page.locator("#validationRail")).toContainText("2 qualifications discovered");
 
     await page.getByRole("tab", { name: /Foundation Diploma/ }).click();
     await expect(page.locator("#qualificationTabs [aria-selected='true']")).toContainText("Foundation Diploma");
     await expect(page.locator("#hierarchyTree")).toContainText("Pearson BTEC Level 3 National Foundation Diploma in Business");
+
+    const foundationGroup = page.locator("#hierarchyTree [data-node-id='group-foundation-mandatory']");
+    const foundationChildren = page.locator("#hierarchyTree .tree-children[data-parent-node-id='group-foundation-mandatory']");
+    await expect(foundationChildren).toBeVisible();
+    await foundationGroup.getByRole("button", { name: "Collapse Mandatory Units" }).click();
+    await expect(foundationChildren).toBeHidden();
+    await foundationGroup.getByRole("button", { name: "Expand Mandatory Units" }).click();
+    await expect(foundationChildren).toBeVisible();
 
     await page.getByRole("tab", { name: /Extended Diploma/ }).click();
     await expect(page.locator("#hierarchyTree")).toContainText("Unit 3: Personal and Business Finance");
@@ -235,10 +244,6 @@ test.describe("review workspace", () => {
       .first()
       .click();
     await expect(page.locator("input[data-field='glh']")).toHaveValue("120?");
-
-    await page.locator("#overrideEnabled").check();
-    await page.locator("#overrideReason").fill("Analyst confirmed the source and approved the remaining blocker by policy.");
-    await page.getByRole("button", { name: "Save override" }).click();
 
     await expect(page.getByRole("button", { name: "Approve and Persist" })).toBeEnabled();
     await page.getByRole("button", { name: "Approve and Persist" }).click();

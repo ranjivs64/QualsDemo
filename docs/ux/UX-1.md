@@ -36,18 +36,18 @@ inputs:
 ## 1. Overview
 
 ### Feature Summary
-A web-based human-in-the-loop (HITL) interface allowing users to upload qualification specification PDFs and review the AI-extracted nested structures across one or more qualifications, including shared units, learning outcomes, assessment criteria, grading, and validation blockers, before persisting them into the master database.
+A web-based human-in-the-loop (HITL) interface allowing users to upload qualification specification PDFs and review the AI-extracted nested structures across one or more qualifications, including shared units, learning outcomes, assessment criteria, grading, and structure summaries, before persisting them into the master database.
 
 ### Design Goals
 1. Provide a side-by-side verification experience (PDF vs. Extracted Data).
 2. Clearly visualize confidence metrics to direct the reviewer's attention to potential issues.
 3. Enable easy line-item editing and document-wide reprocessing to handle AI extraction errors gracefully.
-4. Make shared-unit reuse and validation blockers obvious without forcing reviewers to inspect every branch manually.
+4. Make shared-unit reuse, discovered qualification counts, and hierarchy navigation obvious without forcing reviewers to inspect every branch manually.
 
 ### Success Criteria
 - Time to review and approve an extraction is less than 5 minutes.
 - Evaluators can clearly identify low-confidence nodes instantly.
-- Evaluators can identify shared units, unresolved outcomes or criteria, and rule-validation blockers without expanding the full tree.
+- Evaluators can identify shared units, qualification counts, and nested structure scope without expanding the full tree.
 - Meets WCAG 2.2 AA accessibility standards for all interactive components.
 
 ---
@@ -76,16 +76,16 @@ A web-based human-in-the-loop (HITL) interface allowing users to upload qualific
    - **System Response**: Validates file, starts async extraction, shows progress loader.
 2. **User Action**: Clicks "Review" once extraction is complete.
    - **System Response**: Loads Side-by-Side Review Workspace.
-3. **User Action**: Inspects qualification cards, shared-unit badges, and nodes marked with yellow/red confidence or validation indicators.
-  - **System Response**: Clicking a node highlights the corresponding section on the PDF mock view and reveals where the same unit is reused elsewhere.
+3. **User Action**: Inspects the specification summary, qualification tabs, shared-unit badges, and confidence indicators.
+  - **System Response**: The review workspace shows how many qualifications were discovered and highlights where the same unit is reused elsewhere.
 4. **User Action**: Expands a unit to review linked learning outcomes and assessment criteria.
   - **System Response**: The right pane shows criterion grade level, extracted command verb, and source-linked evidence.
 5. **User Action**: Clicks "Edit" to fix a misaligned criterion, group rule, or grade scheme and saves.
-  - **System Response**: Updates the draft locally, marks the node as "Manually Edited", and recalculates affected validations.
-6. **User Action**: Resolves or explicitly overrides any validation blocker with rationale.
-  - **System Response**: Records the override rationale and updates the approval state.
+  - **System Response**: Updates the draft locally, marks the node as "Manually Edited", and refreshes the displayed structure context.
+6. **User Action**: Collapses or expands hierarchy groups to focus on a specific qualification branch.
+  - **System Response**: The selected hierarchy branch hides or reveals nested entities without losing the current qualification context.
 7. **User Action**: Clicks "Approve & Persist".
-  - **System Response**: Submits payload to Persistence API and routes to success dashboard.
+  - **System Response**: Submits the reviewed payload to the Persistence API once at least one qualification structure exists and routes to the success dashboard.
 
 ---
 
@@ -98,37 +98,38 @@ A web-based human-in-the-loop (HITL) interface allowing users to upload qualific
 ### Side-by-Side Review Viewer
 - **Layout**: 50/50 split width. Resizable pane barrier (desktop).
 - **Left Pane (Source Document)**: Embedded PDF viewer or image representation with bounding box highlight overlays.
-- **Right Pane (Extracted Structure)**: Expandable hierarchical tree or accordion cards with validation summaries and shared-unit indicators.
+- **Right Pane (Extracted Structure)**: Expandable hierarchical tree or accordion cards with specification summary cards, qualification tabs, and shared-unit indicators.
 
 ### Hierarchical Data Cards (The Extraction)
-- **Hierarchy Level 0**: Document Summary (qualification count, shared-unit count, blocker count)
+- **Hierarchy Level 0**: Document Summary (qualification count, shared-unit count, unit count, outcome count, criteria count)
 - **Hierarchy Level 1**: Qualification Summary (Title, Level, GLH, Credits, grading scheme)
 - **Hierarchy Level 2**: Unit Groups (Mandatory/Optional rules, selection requirements)
 - **Hierarchy Level 3**: Units (Title, GLH, Credit, shared-unit badge, assessment type)
 - **Hierarchy Level 4**: Learning Outcomes
-- **Hierarchy Level 5**: Assessment Criteria (grade level, command verb, validation status)
+- **Hierarchy Level 5**: Assessment Criteria (grade level, command verb, structural context)
 - **Contextual Branches**: Grade Schemes and Qualification Rule Sets remain accessible from qualification and unit detail views.
+- **Navigation Pattern**: Any hierarchy level with children can be expanded or collapsed independently.
 
 ### Shared-Unit Indicators
 - **Badge**: "Shared across N qualifications" appears on unit cards and detail headers.
 - **Interaction**: Selecting the badge reveals all linked qualifications and groups using that unit.
 - **Reviewer Benefit**: Prevents duplicate edits and makes reuse explicit before approval.
 
-### Validation Summary Rail
+### Specification Summary Rail
 - **Placement**: Sticky top section in the extracted-structure pane.
-- **Contents**: Blockers, warnings, unresolved fields, GLH or credit mismatches, optional-group rule failures.
-- **Behavior**: Clicking a validation item scrolls to and expands the affected entity.
+- **Contents**: Qualification count, shared-unit count, unit count, learning outcome count, assessment-criteria count, and persistence readiness.
+- **Behavior**: The summary gives structural context at a glance and stays visible while the reviewer navigates the hierarchy.
 
 ### Confidence Badges
 - **Green (High, >90%)**: Subtle checkmark, muted green background.
 - **Yellow (Medium, 70-89%)**: Warning icon, yellow emphasis to draw eye.
 - **Red (Low, <70%)**: Alert icon, red background, auto-expanded for immediate review.
 
-### Approval and Override Panel
+### Approval and Persistence Panel
 - **Primary Action**: Approve and Persist.
 - **Secondary Actions**: Reject, Reprocess, Save Draft.
-- **Blocking Pattern**: Approval is disabled while unresolved blockers remain unless the reviewer enters override rationale where policy permits.
-- **Audit Context**: The panel shows edited count, shared-unit count, and blocker or override summary.
+- **Readiness Pattern**: Approval becomes available once extraction has produced at least one qualification structure for review.
+- **Audit Context**: The panel shows qualification, shared-unit, unit, outcome, and criteria counts alongside persistence readiness.
 
 ---
 
@@ -158,8 +159,8 @@ A web-based human-in-the-loop (HITL) interface allowing users to upload qualific
 - Focus rings visible for all interactive tree nodes.
 - High color contrast ratios (> 4.5:1) for all text and badges.
 - aria-expanded attributes on all collapsibles within the hierarchy.
-- Shared-unit badges and validation indicators must expose text equivalents to screen readers.
-- Keyboard users must be able to move from validation summaries to affected hierarchy nodes without pointer interaction.
+- Shared-unit badges and summary indicators must expose text equivalents to screen readers.
+- Keyboard users must be able to move between qualification tabs, hierarchy toggles, and hierarchy nodes without pointer interaction.
 
 ---
 
@@ -176,4 +177,4 @@ HTML/CSS prototypes have been created using Tailwind CSS with glassmorphism and 
 - The review workspace should lazy-load the PDF bounds to prevent heavy DOM rendering if documents are 100+ pages.
 - When an analyst edits a node, flag it so the system stops showing "Low Confidence" and overrides it with "User Verified".
 - Shared-unit edits should prompt the reviewer to choose whether the change applies to the canonical shared unit or only to one qualification-specific membership.
-- Validation recalculation should run after edits and reprocess actions so approval state stays accurate.
+- Structure summary counts should refresh after edits and reprocess actions so persistence readiness stays accurate.
