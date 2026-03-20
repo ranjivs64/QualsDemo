@@ -55,12 +55,12 @@ inputs:
 
 ## 1. Overview
 
-This specification defines the architecture for a web application that ingests qualification PDFs, extracts qualification structure with AI-assisted document understanding, lets reviewers inspect and correct the result, and persists only approved structures through a dedicated API into a relational database.
+This specification defines the architecture for a web application that ingests qualification PDFs, extracts qualification structure with AI-assisted document understanding, lets reviewers inspect and correct the result, and persists only approved structures through a dedicated API into a relational database. The updated product contract requires the platform to support multiple qualifications in one source document, shared units reused across qualifications, learning outcomes and assessment criteria linked to units, and structural validation before approval.
 
 The design prioritizes four things:
 - extraction quality for semistructured documents,
 - review safety before persistence,
-- relational integrity for qualification structures,
+- relational integrity for qualification structures, including shared units and nested assessment entities,
 - and operational controls for uploads, retention, and audit.
 
 **Confidence: HIGH**
@@ -74,6 +74,10 @@ The design prioritizes four things:
 - Deliver a browser-based review workspace.
 - Separate extraction from persistence through an approval gate.
 - Support both reviewer edit and reprocess workflows.
+- Support documents containing more than one qualification.
+- Preserve shared-unit identity across multiple qualifications.
+- Persist learning outcomes, assessment criteria, and command verbs or grade descriptors when present.
+- Validate mandatory units, GLH totals, credit totals, and optional-group rules before approval.
 - Persist approved structures through a dedicated API and relational database.
 - Enforce one-day retention for uploaded PDFs and rejected extraction payloads.
 
@@ -90,23 +94,23 @@ The design prioritizes four things:
 ### 3.1 High-level system architecture
 
 ```mermaid
-graph TD
- U[Reviewer Browser] --> W[Web Application]
- W --> G[Application API]
+flowchart TD
+ U["Reviewer Browser"] --> W["Web Application"]
+ W --> G["Application API"]
 
- G --> O[Upload and Job Orchestration Service]
- G --> R[Review Workspace Service]
- G --> P[Qualification Persistence API]
+ G --> O["Upload and Job Orchestration Service"]
+ G --> R["Review Workspace Service"]
+ G --> P["Qualification Persistence API"]
 
- O --> S[Secure Object Storage]
- O --> Q[Job Queue]
- Q --> E[Extraction Worker]
- E --> A[Extraction Provider Adapter]
- A --> X[Managed Document AI Provider]
- E --> M[Schema Mapping Service]
- M --> V[Validation Service]
+ O --> S["Secure Object Storage"]
+ O --> Q["Job Queue"]
+ Q --> E["Extraction Worker"]
+ E --> A["Extraction Provider Adapter"]
+ A --> X["Managed Document AI Provider"]
+ E --> M["Schema Mapping Service"]
+ M --> V["Validation Service"]
 
- R --> D[(Relational Database)]
+ R --> D[("Relational Database")]
  P --> D
  O --> D
 
@@ -246,18 +250,18 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 
 ## 5. Component Design
 
-### 4.1 Web Application
+### 5.1 Web Application
 
 | Component | Responsibility |
 |----------|----------------|
 | Upload workspace | Accept PDF uploads, show job state, enforce client-side constraints |
-| Review hierarchy panel | Render qualification, groups, units, grading, and rules as a hierarchy |
-| Detail panel | Render selected entity fields, confidence, source references, and validation messages |
+| Review hierarchy panel | Render document, qualifications, groups, shared units, learning outcomes, assessment criteria, grading, and rules as a hierarchy |
+| Detail panel | Render selected entity fields, confidence, source references, validation messages, and shared-unit reuse context |
 | Edit workspace | Allow supported field corrections before approval |
 | Reprocess controls | Let reviewer submit adjusted extraction guidance |
-| Approval panel | Approve, reject, or defer extraction result |
+| Approval panel | Approve, reject, defer extraction result, or capture validation override rationale |
 
-### 4.2 Application API
+### 5.2 Application API
 
 | Component | Responsibility |
 |----------|----------------|
@@ -267,7 +271,7 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 | Reprocess API | Create a new extraction attempt linked to the same document lineage |
 | Approval API | Freeze approved payload and hand off to persistence API |
 
-### 4.3 Extraction Orchestration Service
+### 5.3 Extraction Orchestration Service
 
 | Capability | Responsibility |
 |-----------|----------------|
@@ -276,31 +280,33 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 | Queue dispatch | Decouple user upload from extraction execution |
 | Retry coordination | Retry transient failures safely |
 
-### 4.4 Extraction Worker
+### 5.4 Extraction Worker
 
 | Stage | Responsibility |
 |------|----------------|
 | Provider invocation | Call managed document AI through the adapter |
 | Normalization | Convert provider output into internal extraction elements |
-| Schema mapping | Map elements to qualification entities |
-| Validation | Flag missing, conflicting, or structurally invalid output |
+| Schema mapping | Map elements to qualifications, shared units, outcomes, criteria, and rule entities |
+| Validation | Flag missing, conflicting, or structurally invalid output, including GLH, credit, and selection-rule conflicts |
 | Draft persistence | Save extraction attempt as a draft reviewable result |
 
-### 4.5 Review Service
+### 5.5 Review Service
 
 | Capability | Responsibility |
 |-----------|----------------|
 | Draft retrieval | Load latest draft and extraction lineage |
 | Source linking | Resolve page and section references for selected nodes |
 | Change tracking | Track edits made by reviewers |
+| Shared-unit projection | Show where one unit is reused across multiple qualifications or groups |
+| Validation state | Return blockers, warnings, and override requirements with affected entities |
 | Reprocess lineage | Preserve attempt history across reruns |
 | Approval packaging | Produce immutable approved submission payload |
 
-### 4.6 Qualification Persistence API
+### 5.6 Qualification Persistence API
 
 | Capability | Responsibility |
 |-----------|----------------|
-| Contract validation | Validate approved payload shape and referential integrity |
+| Contract validation | Validate approved payload shape, referential integrity, and multi-qualification shared-unit semantics |
 | Persistence orchestration | Write qualification graph transactionally |
 | Idempotency enforcement | Prevent duplicate writes for repeated approval submissions |
 | Audit recording | Record submission event and outcome |
@@ -313,11 +319,12 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 
 ```mermaid
 erDiagram
-    QUALIFICATION ||--o{ UNIT : contains
     QUALIFICATION ||--o{ UNIT_GROUP : organizes
     QUALIFICATION ||--o{ QUAL_RULE_SET : governs
+    UNIT ||--o{ LEARNING_OUTCOME : contains
+    LEARNING_OUTCOME ||--o{ ASSESSMENT_CRITERION : contains
     GRADE_SCHEME ||--o{ GRADE_OPTION : defines
-    UNIT }o--|| GRADE_SCHEME : uses
+    UNIT }o--o| GRADE_SCHEME : uses
     UNIT_GROUP ||--o{ UNIT_GROUP_MEMBER : includes
     UNIT ||--o{ UNIT_GROUP_MEMBER : assigned_to
     QUAL_RULE_SET ||--o{ QUAL_RULE_SET_MEMBER : includes
@@ -337,7 +344,6 @@ erDiagram
 
     UNIT {
         uuid unit_id
-        uuid qualification_id
         string code
         string name
         string level
@@ -345,6 +351,26 @@ erDiagram
         number guided_learning_hours
         string assessment_type
         uuid grade_scheme_id
+        string shared_unit_key
+        boolean is_shared_unit
+    }
+
+    LEARNING_OUTCOME {
+        uuid learning_outcome_id
+        uuid unit_id
+        string source_outcome_id
+        string description
+        number display_order
+    }
+
+    ASSESSMENT_CRITERION {
+        uuid assessment_criterion_id
+        uuid unit_id
+        uuid learning_outcome_id
+        string grade_level
+        string description
+        string command_verb
+        number display_order
     }
 
     GRADE_SCHEME {
@@ -373,6 +399,7 @@ erDiagram
 
     UNIT_GROUP_MEMBER {
         uuid unit_group_member_id
+        uuid qualification_id
         uuid unit_group_id
         uuid unit_id
         boolean mandatory_in_group
@@ -430,9 +457,12 @@ erDiagram
         uuid extraction_entity_id
         uuid extraction_run_id
         string entity_type
+        string entity_key
+        string parent_entity_key
         string source_reference
         number confidence_score
         string review_state
+        string validation_state
     }
 
     REVIEW_ACTION {
@@ -491,6 +521,8 @@ The PRD explicitly sets one-day retention for uploaded PDFs and rejected payload
 | Review Action | Reviewer edit, rejection, approval, or reprocess action |
 | Submission | Immutable approved payload sent to persistence API |
 | Qualification | Persistent system-of-record entity |
+| Shared Unit | Reusable unit entity referenced by one or more qualifications |
+| Validation Summary | Deterministic checks and override metadata tied to a draft or submission |
 
 ### 7.3 Endpoint contract summary
 
@@ -513,11 +545,15 @@ The PRD explicitly sets one-day retention for uploaded PDFs and rejected payload
 | Section | Required | Description |
 |--------|----------|-------------|
 | Submission metadata | Yes | Submission id, run id, reviewer id, approval timestamp, idempotency key |
-| Qualification | Yes | Core qualification fields |
-| Units | Yes | Unit collection linked to the qualification |
+| Qualifications | Yes | One or more qualification records from the approved extraction |
+| Shared units | Yes | Canonical unit collection reused across qualifications when applicable |
+| Qualification-unit memberships | Yes | Unit group memberships linking qualifications, groups, and units |
+| Learning outcomes | Yes | Outcome collection linked to units |
+| Assessment criteria | Yes | Criteria linked to outcomes or directly to units |
 | Grade schemes | Yes | Grade scheme collection and nested grade options |
 | Unit groups | Yes | Unit group collection and unit memberships |
 | Rule sets | Yes | Qualification rule sets and rule set members |
+| Validation summary | Yes | Pass, warning, blocker, and override information frozen at approval time |
 | Audit annotations | Yes | Signals for edited fields, reprocessed run lineage, and approval path |
 
 ### 7.5 API validation rules
@@ -525,9 +561,14 @@ The PRD explicitly sets one-day retention for uploaded PDFs and rejected payload
 | Rule | Description |
 |-----|-------------|
 | Qualification uniqueness | Qualification code must be unique within the authoritative namespace |
-| Referential completeness | Units, groups, grade schemes, and rule sets must resolve to valid parents |
+| Referential completeness | Units, outcomes, criteria, groups, grade schemes, and rule sets must resolve to valid parents |
+| Shared-unit identity | Shared units must be persisted once and referenced consistently across qualifications |
+| Learning-outcome linkage | Every learning outcome must reference an existing unit |
+| Assessment-criteria linkage | Every assessment criterion must reference a valid unit and may optionally reference a learning outcome |
 | Rule set integrity | Each rule set member must reference exactly one unit group or one child rule set |
 | Group membership integrity | Each unit group member must reference an existing unit |
+| Qualification totals | When totals are present, GLH and credit sums must satisfy qualification or group rules |
+| Optional-group selection integrity | Selection rules such as minimum units or credits must be satisfiable and reviewable |
 | Grade ordering | Grade option rank must be unique within a grade scheme |
 | Submission idempotency | Repeated submission with the same idempotency key must not duplicate the qualification graph |
 
@@ -549,15 +590,15 @@ The PRD explicitly sets one-day retention for uploaded PDFs and rejected payload
 ### 8.1 Security architecture
 
 ```mermaid
-graph TD
- U[Authenticated Reviewer] --> W[Web App]
- W --> A[Application API]
- A --> Auth[Identity and Access Control]
- A --> Upload[Upload Validation]
- Upload --> Scan[Malware and Type Validation]
- Upload --> Store[Isolated Object Storage]
- A --> Persist[Persistence API]
- Persist --> Db[(Relational Database)]
+flowchart TD
+ U["Authenticated Reviewer"] --> W["Web App"]
+ W --> A["Application API"]
+ A --> Auth["Identity and Access Control"]
+ A --> Upload["Upload Validation"]
+ Upload --> Scan["Malware and Type Validation"]
+ Upload --> Store["Isolated Object Storage"]
+ A --> Persist["Persistence API"]
+ Persist --> Db[("Relational Database")]
 
  style Auth fill:#E8F5E9,stroke:#2E7D32
  style Upload fill:#FFF3E0,stroke:#E65100
@@ -627,7 +668,7 @@ If pilot onboarding reveals hidden personal data in some document classes, the s
 | Upload validation error | Wrong file type or oversized document | Immediate rejection with guidance |
 | Extraction failure | Provider timeout or malformed output | Run marked failed and retryable |
 | Mapping failure | Output cannot be mapped safely | Draft saved with unresolved state or run failed depending on severity |
-| Validation failure | Missing critical relations | Draft flagged for review, not auto-submitted |
+| Validation failure | Missing critical relations, invalid totals, or unsatisfied optional-group rules | Draft flagged for review, not auto-submitted |
 | Reprocess failure | Invalid adjustment input | Reviewer sees correction request failure and can retry |
 | Submission failure | Persistence API unavailable or validation rejection | Approved payload preserved, retry path available |
 
@@ -699,20 +740,20 @@ The architecture should capture traceable workflow correlation from upload to ap
 
 | Layer | Scope |
 |------|-------|
-| Domain validation tests | Qualification graph integrity, rule set integrity, grade ordering |
+| Domain validation tests | Qualification graph integrity, shared-unit reuse, learning outcome linkage, assessment criteria linkage, rule set integrity, grade ordering, and totals validation |
 | API contract tests | Upload, review, approval, submission contracts |
-| Workflow integration tests | Upload to draft, edit and reprocess, approve and submit |
+| Workflow integration tests | Upload to draft, edit and reprocess, validate blockers, approve and submit |
 | Provider adapter tests | Normalize provider output into internal extraction model |
-| Review UI tests | Hierarchy navigation, edit flow, source linking, approval flow |
+| Review UI tests | Hierarchy navigation, shared-unit indicators, outcome and criteria review, edit flow, source linking, approval flow |
 | Accessibility tests | WCAG AA checks on review workflow |
-| Evaluation corpus tests | Compare extraction output against approved target structures |
+| Evaluation corpus tests | Compare extraction output against approved target structures, including multi-qualification documents and shared-unit cases |
 
 ### 12.2 Acceptance testing focus
 
 | Requirement area | Acceptance focus |
 |------------------|------------------|
-| Extraction | Required entities and relationships recovered |
-| Review | Reviewer can understand, edit, reprocess, reject, and approve |
+| Extraction | Required entities and relationships recovered, including outcomes, criteria, and shared units |
+| Review | Reviewer can understand, edit, reprocess, validate, reject, and approve |
 | Persistence | Approved graph is written through API only |
 | Security | Upload protections and authorization controls are enforced |
 | Retention | Uploaded PDFs and rejected payloads purge after one day |
@@ -721,6 +762,7 @@ The architecture should capture traceable workflow correlation from upload to ap
 
 Before production rollout, the platform should demonstrate:
 - schema completeness at PRD target,
+- multi-qualification parsing and shared-unit reuse at PRD target,
 - first-pass approval rate at PRD target,
 - stable submission success,
 - and no uncontrolled persistence path.
@@ -734,8 +776,8 @@ Before production rollout, the platform should demonstrate:
 | Phase | Objective |
 |------|-----------|
 | Phase 1 | Create database schema and persistence API |
-| Phase 2 | Create upload, extraction, mapping, and draft persistence workflow |
-| Phase 3 | Create review web app with edit and reprocess paths |
+| Phase 2 | Create upload, extraction, mapping, shared-unit identity, and draft persistence workflow |
+| Phase 3 | Create review web app with edit, validation, and reprocess paths |
 | Phase 4 | Enable approval and submission to persistence API |
 | Phase 5 | Pilot evaluation and provider tuning |
 
@@ -761,3 +803,5 @@ There is no legacy API or database in this workspace, so this is a greenfield pe
 3. Should approved payload artifacts be retained beyond normal audit metadata, and if so for how long?
 4. Is a single managed provider sufficient for pilot launch, or is a secondary provider adapter needed from day one for resilience?
 5. What is the exact threshold for escalating a draft from reviewable to hard-failed when mapping or validation finds structural conflicts?
+6. What canonical rule should generate or resolve shared-unit identity when source numbering and titles conflict?
+7. Should command verbs be normalized into controlled vocabulary values at persistence time, or stored only as extracted text plus reviewer edits?

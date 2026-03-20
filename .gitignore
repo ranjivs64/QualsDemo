@@ -5,6 +5,8 @@ server/data/*.sqlite-wal
 server/uploads/
 server/store.json
 .env
+.vscode/
+test-results/
 
 # --- AgentX (auto-generated, do not edit this block) ---
 # AgentX runtime state

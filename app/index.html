@@ -32,11 +32,11 @@
       <section class="view is-active" id="view-dashboard" aria-labelledby="dashboard-title">
         <div class="hero-panel">
           <div>
-            <p class="eyebrow">Upload -> Extract -> Verify -> Persist</p>
-            <h2 id="dashboard-title">Turn qualification PDFs into structured data</h2>
+            <p class="eyebrow">Upload -> Extract -> Validate -> Persist</p>
+            <h2 id="dashboard-title">Review complex qualification packs without losing structure</h2>
             <p class="hero-copy">
-              This MVP implements the product flow from the PRD and spec: upload a PDF, review AI-extracted
-              qualification structures, correct low-confidence fields, and persist only approved data.
+              Upload one specification or a combined pack, inspect extracted qualifications, review shared units,
+              outcomes, criteria, and validation blockers, then persist only approved data.
             </p>
           </div>
           <div class="hero-metrics" id="heroMetrics"></div>
@@ -61,8 +61,8 @@
               <div class="dropzone-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 7 8h3v6h4V8h3zm-7 13h14v3H5z"/></svg>
               </div>
-              <h4>Drop a PDF here or choose a file</h4>
-              <p id="upload-help">Accepted format: PDF. Upload a real specification or use the helper button to create a quick test job.</p>
+              <h4>Drop a qualification PDF here or choose a file</h4>
+              <p id="upload-help">Accepted format: PDF. Combined specifications, shared-unit packs, and single qualifications are all supported.</p>
               <div class="dropzone-actions">
                 <button class="primary-button" id="selectFileButton" type="button">Choose PDF</button>
                 <button class="secondary-button" id="simulateUploadButton" type="button">Create Test Job</button>
@@ -98,7 +98,7 @@
           <div>
             <p class="panel-kicker">Human-in-the-loop review</p>
             <h2 id="review-title">Qualification review workspace</h2>
-            <p class="muted" id="reviewSubtitle">Select a job from the queue to begin verification.</p>
+            <p class="muted" id="reviewSubtitle">Select a job from the queue to inspect qualification structure and validation state.</p>
           </div>
           <div class="review-actions">
             <button class="secondary-button" id="reprocessButton" type="button">Reprocess</button>
@@ -113,41 +113,21 @@
                 <p class="panel-kicker">Source Context</p>
                 <h3 id="document-title">PDF focus view</h3>
               </div>
-              <span class="badge badge-neutral" id="pageBadge">Page 14 of 92</span>
+              <span class="badge badge-neutral" id="pageBadge">Awaiting review</span>
             </div>
-            <div class="document-canvas" id="documentCanvas">
-              <div class="document-highlight" id="documentHighlight">
-                <div class="highlight-label" id="highlightLabel">Focus: GLH value</div>
-              </div>
-              <div class="document-page">
-                <h4>No document selected</h4>
-                <p class="document-section-label">Upload a qualification PDF</p>
-                <p class="document-emphasis">The review canvas will show the current extraction focus after a job is opened.</p>
-                <div class="document-metadata">
-                  <div>
-                    <span>Status</span>
-                    <strong>Awaiting upload</strong>
-                  </div>
-                  <div>
-                    <span>GLH</span>
-                    <strong id="documentGlhValue">Pending</strong>
-                  </div>
-                </div>
-                <p>
-                  Jobs now start from an empty workspace. No sample qualifications are loaded at startup or after reset.
-                </p>
-              </div>
-            </div>
+            <div class="document-canvas" id="documentCanvas"></div>
           </section>
 
           <section class="panel hierarchy-panel" aria-labelledby="hierarchy-title">
             <div class="panel-header compact">
               <div>
                 <p class="panel-kicker">Extracted Structure</p>
-                <h3 id="hierarchy-title">Qualification hierarchy</h3>
+                <h3 id="hierarchy-title">Validation and hierarchy</h3>
               </div>
               <span class="badge" id="reviewStatusBadge">Needs validation</span>
             </div>
+            <div class="validation-rail" id="validationRail"></div>
+            <div class="qualification-tabs" id="qualificationTabs" role="tablist" aria-label="Qualifications"></div>
             <div class="hierarchy-tree" id="hierarchyTree"></div>
           </section>
 
@@ -155,13 +135,14 @@
             <div class="panel-header compact">
               <div>
                 <p class="panel-kicker">Selected Node</p>
-                <h3 id="inspector-title">Verification inspector</h3>
+                <h3 id="inspector-title">Detail and approval</h3>
               </div>
             </div>
             <div id="inspectorContent" class="inspector-content empty-state">
               <h4>No node selected</h4>
-              <p>Select a qualification, group, unit, or grade scheme to review its extracted fields and confidence.</p>
+              <p>Select a qualification, group, unit, outcome, or criterion to inspect extracted fields and reviewer actions.</p>
             </div>
+            <div id="approvalPanel" class="approval-panel"></div>
           </aside>
         </div>
       </section>
@@ -191,6 +172,7 @@
                 <tr>
                   <th>File</th>
                   <th>Status</th>
+                  <th>Qualifications</th>
                   <th>Confidence</th>
                   <th>Attempts</th>
                   <th>Updated</th>
@@ -206,37 +188,6 @@
   </div>
 
   <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="true"></div>
-
-  <template id="jobCardTemplate">
-    <article class="job-card">
-      <div class="job-card-main">
-        <div class="job-icon"></div>
-        <div>
-          <h4 class="job-name"></h4>
-          <p class="job-meta"></p>
-        </div>
-      </div>
-      <div class="job-card-side">
-        <span class="badge job-status"></span>
-        <button class="secondary-button job-action" type="button">Open</button>
-      </div>
-    </article>
-  </template>
-
-  <template id="treeNodeTemplate">
-    <div class="tree-node">
-      <button class="tree-toggle" type="button" aria-expanded="true">-</button>
-      <div class="tree-card" tabindex="0">
-        <div class="tree-card-head">
-          <span class="tree-kind"></span>
-          <span class="badge tree-badge"></span>
-        </div>
-        <h4 class="tree-title"></h4>
-        <p class="tree-summary"></p>
-      </div>
-      <div class="tree-children"></div>
-    </div>
-  </template>
 
   <script src="./assets/app.js"></script>
 </body>

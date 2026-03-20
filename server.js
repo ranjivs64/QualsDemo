@@ -10,6 +10,7 @@ const {
   createUploadedJob,
   updateNodeField,
   verifyNode,
+  updateApprovalOverride,
   approveJob,
   reprocessJob,
   resetState,
@@ -299,10 +300,39 @@ async function handleApi(req, res, pathname, searchParams) {
       return;
     }
     if (!job.reviewReady) {
-      sendProblem(res, 409, "Conflict", "Job cannot be approved until all low-confidence fields are verified.");
+      const blockerCount = job.validationSummary && job.validationSummary.counts ? job.validationSummary.counts.blockers : 0;
+      sendProblem(
+        res,
+        409,
+        "Conflict",
+        blockerCount > 0
+          ? `Job cannot be approved while ${blockerCount} validation blocker${blockerCount === 1 ? " remains" : "s remain"}.`
+          : "Job cannot be approved until review requirements are satisfied."
+      );
       return;
     }
     sendJson(res, 200, { item: approveJob(approveMatch[1]) });
+    return;
+  }
+
+  const overrideMatch = pathname.match(/^\/api\/v1\/jobs\/([^/]+)\/approval-override$/);
+  if (req.method === "PATCH" && overrideMatch) {
+    const payload = await parseBody(req);
+    const enabled = Boolean(payload.enabled);
+    const rationale = String(payload.rationale || "").trim();
+
+    if (rationale.length > 1000) {
+      sendProblem(res, 422, "Validation failed", "Override rationale must be 1000 characters or fewer.");
+      return;
+    }
+
+    const job = updateApprovalOverride(overrideMatch[1], enabled, rationale);
+    if (!job) {
+      sendProblem(res, 404, "Not Found", "Job was not found.");
+      return;
+    }
+
+    sendJson(res, 200, { item: job });
     return;
   }
 

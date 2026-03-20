@@ -15,6 +15,7 @@ const {
   getJob,
   updateNodeField,
   verifyNode,
+  updateApprovalOverride,
   approveJob,
   reprocessJob,
   listPersistedQualifications,
@@ -324,6 +325,102 @@ test("approveJob persists multiple qualifications from one job and reuses shared
   assert.equal(firstDetail.units.length, 1);
   assert.equal(secondDetail.units.length, 1);
   assert.equal(firstDetail.units[0].id, secondDetail.units[0].id);
+
+  const reviewState = getJob(reviewJob.id);
+  assert.equal(reviewState.validationSummary.counts.sharedUnits, 1);
+});
+
+test("updateNodeField updates shared units across linked qualifications", () => {
+  const created = createUploadedJob("Shared_Unit_Test.pdf");
+  const sharedUnit = {
+    id: "unit-shared-1",
+    kind: "Unit",
+    title: "Unit 1: Shared Systems",
+    summary: "Reference V/100/1001, GLH 60, internally assessed",
+    confidence: 78,
+    needsAttention: true,
+    fields: {
+      unitNumber: "Unit 1",
+      reference: "V/100/1001",
+      glh: "60?",
+      creditValue: "10",
+      assessmentType: "Internal",
+      gradeScheme: "Pass / Merit / Distinction",
+      gradingScheme: "Pass / Merit / Distinction"
+    },
+    children: []
+  };
+
+  const qualificationOne = {
+    id: "qualification-one",
+    kind: "Qualification",
+    title: "Qualification One",
+    summary: "Shared unit test one",
+    confidence: 90,
+    fields: { qualificationName: "Qualification One", code: "100/0001/1" },
+    children: [
+      {
+        id: "group-one",
+        kind: "Unit Group",
+        title: "Mandatory Units",
+        summary: "All listed units must be completed",
+        confidence: 90,
+        fields: { groupType: "Mandatory", minimumUnits: "0", selectionRule: "All listed units must be completed" },
+        children: [sharedUnit]
+      }
+    ]
+  };
+
+  const qualificationTwo = {
+    id: "qualification-two",
+    kind: "Qualification",
+    title: "Qualification Two",
+    summary: "Shared unit test two",
+    confidence: 90,
+    fields: { qualificationName: "Qualification Two", code: "100/0002/2" },
+    children: [
+      {
+        id: "group-two",
+        kind: "Unit Group",
+        title: "Mandatory Units",
+        summary: "All listed units must be completed",
+        confidence: 90,
+        fields: { groupType: "Mandatory", minimumUnits: "0", selectionRule: "All listed units must be completed" },
+        children: [sharedUnit]
+      }
+    ]
+  };
+
+  const reviewJob = hydrateJobForReview(created.id, {
+    qualificationCode: "100/0001/1",
+    confidence: 78,
+    reviewReady: false,
+    pages: { current: 1, total: 10 },
+    documentFocus: { top: 25, height: 10, label: "Focus: shared unit GLH" },
+    qualification: qualificationOne,
+    qualifications: [qualificationOne, qualificationTwo],
+    sourceTextExcerpt: "Shared unit test",
+    extractionMeta: { provider: "fallback", parser: "test-fixture" }
+  });
+
+  updateNodeField(reviewJob.id, "unit-shared-1", "glh", "60");
+  const updated = getJob(reviewJob.id);
+
+  assert.equal(updated.qualifications[0].children[0].children[0].fields.glh, "60");
+  assert.equal(updated.qualifications[1].children[0].children[0].fields.glh, "60");
+  assert.equal(updated.validationSummary.counts.blockers, 0);
+});
+
+test("approval override enables approval when blockers remain and rationale satisfies policy", () => {
+  const reviewJob = createReviewJob();
+  const overrideUpdated = updateApprovalOverride(reviewJob.id, true, "Source scan is clear and policy allows manual approval.");
+
+  assert.equal(overrideUpdated.approvalOverride.enabled, true);
+  assert.ok(overrideUpdated.approvalOverride.rationale.length >= 12);
+  assert.equal(overrideUpdated.reviewReady, true);
+
+  const approved = approveJob(reviewJob.id);
+  assert.equal(approved.status, "persisted");
 });
 
 test("reprocessJob resets a job back to processing", () => {

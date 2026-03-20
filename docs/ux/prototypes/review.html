@@ -3,390 +3,607 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extract Qualification - Review</title>
+    <title>QualExtract Prototype - Review Workspace</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    colors: { primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' } },
-                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                    colors: {
+                        ink: '#14213d',
+                        sand: '#f3efe6',
+                        ember: '#b6461f',
+                        tide: '#0d5c63',
+                        moss: '#316650',
+                        fog: '#edf1f3',
+                        dusk: '#f7f3ea'
+                    },
+                    fontFamily: {
+                        sans: ['Manrope', 'Segoe UI', 'sans-serif'],
+                        display: ['Fraunces', 'Georgia', 'serif'],
+                        mono: ['IBM Plex Mono', 'Consolas', 'monospace']
+                    },
+                    boxShadow: {
+                        float: '0 24px 60px rgba(20, 33, 61, 0.12)',
+                        panel: '0 14px 30px rgba(20, 33, 61, 0.08)'
+                    }
                 }
             }
-        }
+        };
     </script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; text-rendering: optimizeLegibility;}
-        
-        /* Tree lines */
-        .tree-line::before {
-            content: '';
-            position: absolute;
-            top: 24px;
-            left: 11px;
-            bottom: -8px;
-            width: 2px;
-            background-color: #e5e7eb;
-            z-index: 0;
-            transition: all 0.2s;
-        }
-        .tree-node:last-child > .tree-line::before { display: none; }
-        
-        .interactive-card { transition: all 0.2s ease; cursor: pointer; }
-        .interactive-card:hover { transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-        .interactive-card.selected { border-color: #2563eb; ring: 2px; ring-color: #bfdbfe; }
-        
-        /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .focus-box { transition: all 0.3s ease; }
-        .focus-box-active { background-color: rgba(24cd, 172, 54, 0.4); border-color: #d97706; box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.3); }
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
 
-        #toast {
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            transform: translateY(100%);
-            opacity: 0;
+        html {
+            scroll-behavior: smooth;
         }
-        #toast.show {
-            transform: translateY(0);
-            opacity: 1;
+
+        body {
+            background:
+                radial-gradient(circle at top left, rgba(13, 92, 99, 0.08), transparent 25%),
+                radial-gradient(circle at top right, rgba(182, 70, 31, 0.09), transparent 26%),
+                linear-gradient(180deg, #f6f4ed 0%, #f8fafb 44%, #edf1f3 100%);
         }
-        
-        /* Smooth Collapse */
-        .tree-children {
-            transition: max-height 0.3s ease, opacity 0.3s ease;
-            overflow: hidden;
-            opacity: 1;
-            max-height: 2000px; /* arbitrary high number */
+
+        .workspace-grid {
+            grid-template-columns: minmax(320px, 48%) minmax(360px, 52%);
         }
-        .tree-children.collapsed {
-            max-height: 0;
-            opacity: 0;
+
+        .pdf-highlight,
+        .entity-card,
+        .validation-link,
+        .qualification-tab,
+        .approval-toggle {
+            transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+        }
+
+        .entity-card:hover,
+        .validation-link:hover,
+        .qualification-tab:hover,
+        .approval-toggle:hover {
+            transform: translateY(-1px);
+        }
+
+        .entity-card.active {
+            border-color: #0d5c63;
+            box-shadow: 0 18px 36px rgba(13, 92, 99, 0.12);
+            background: rgba(13, 92, 99, 0.05);
+        }
+
+        .pdf-highlight.active {
+            border-color: #0d5c63;
+            background: rgba(13, 92, 99, 0.18);
+            box-shadow: 0 0 0 6px rgba(13, 92, 99, 0.14);
+        }
+
+        .validation-link.active {
+            border-color: #b6461f;
+            background: rgba(182, 70, 31, 0.08);
+        }
+
+        .qualification-tab.active {
+            background: #14213d;
+            color: #ffffff;
+            border-color: #14213d;
+        }
+
+        .approval-toggle.active {
+            border-color: #0d5c63;
+            background: rgba(13, 92, 99, 0.08);
+        }
+
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: rgba(20, 33, 61, 0.16);
+            border-radius: 999px;
         }
     </style>
 </head>
-<body class="h-screen flex flex-col bg-gray-50 text-gray-900 overflow-hidden relative">
+<body class="min-h-screen text-ink antialiased">
+    <a href="#workspace" class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink">Skip to workspace</a>
 
-    <!-- Global Toast -->
-    <div id="toast" class="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-lg shadow-xl font-medium text-sm border border-gray-700 pointer-events-none">
-        <i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>
-        <span>Saved to Persistence API successfully. Redirecting...</span>
+    <div id="toast" class="pointer-events-none fixed bottom-6 right-6 z-50 hidden rounded-2xl border border-moss/20 bg-white px-5 py-4 shadow-float">
+        <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-moss text-white">
+                <i data-lucide="check-check" class="h-5 w-5"></i>
+            </div>
+            <div>
+                <p class="text-sm font-bold text-ink">Submission queued</p>
+                <p class="text-sm text-ink/65">Approved graph sent to the persistence API.</p>
+            </div>
+        </div>
     </div>
 
-    <!-- Header -->
-    <header class="bg-white border-b border-gray-200 h-16 flex-shrink-0 flex items-center justify-between px-4 sm:px-6 relative z-10">
-        <div class="flex items-center gap-4">
-            <a href="index.html" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
-                <i data-lucide="arrow-left" class="w-5 h-5"></i>
-            </a>
-            <div>
-                <h1 class="font-semibold text-gray-900 text-sm">Review Extraction</h1>
-                <p class="text-xs text-gray-500">BTEC_Level3_Business_Spec.pdf</p>
+    <header class="sticky top-0 z-40 border-b border-white/70 bg-white/78 backdrop-blur-xl">
+        <div class="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+            <div class="flex min-w-0 items-center gap-4">
+                <a href="index.html" class="flex h-11 w-11 items-center justify-center rounded-2xl border border-ink/10 bg-white text-ink shadow-sm transition hover:border-ink/20 hover:bg-fog" aria-label="Back to intake">
+                    <i data-lucide="arrow-left" class="h-5 w-5"></i>
+                </a>
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold uppercase tracking-[0.22em] text-tide">Review workspace</p>
+                    <h1 class="truncate font-display text-2xl text-ink">BTEC Business Family 2026</h1>
+                    <p class="mt-1 truncate text-sm text-ink/62">2 qualifications, 1 shared unit, 2 blockers, 1 warning, 14 editable entities.</p>
+                </div>
             </div>
-            <span id="headerBadge" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200 transition-colors">
-                Needs Validation
-            </span>
-        </div>
-        <div class="flex items-center gap-3">
-            <button class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm active:scale-95 transition-all">
-                Reprocess Document
-            </button>
-            <button id="btnApprove" onclick="handleApprove()" class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
-                <i data-lucide="check-circle" class="w-4 h-4"></i> Approve & Persist
-            </button>
+            <div class="flex flex-wrap items-center justify-end gap-3">
+                <span id="headerState" class="rounded-full border border-ember/20 bg-ember/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember">Approval blocked</span>
+                <button class="rounded-full border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:border-ink/20 hover:bg-fog">Save draft</button>
+                <button class="rounded-full border border-ink/10 bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:border-ink/20 hover:bg-fog">Reprocess</button>
+                <button id="approveButton" type="button" onclick="handleApprove()" disabled class="rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white opacity-50 shadow-sm transition">Approve and persist</button>
+            </div>
         </div>
     </header>
 
-    <!-- Main Workspace -->
-    <main class="flex-grow flex h-[calc(100vh-64px)]">
-        
-        <!-- Left Pane: PDF Viewer Mock -->
-        <section class="w-1/2 bg-gray-800 flex flex-col border-r border-gray-200">
-            <div class="h-12 bg-gray-900 flex items-center justify-between px-4 text-gray-300 text-xs">
-                <div class="flex items-center gap-2">
-                    <i data-lucide="file-text" class="w-4 h-4"></i>
-                    <span>Source Document (Page 14 of 92)</span>
-                </div>
-                <div class="flex gap-2 items-center bg-gray-800 rounded px-2">
-                    <button class="p-1 hover:text-white"><i data-lucide="zoom-out" class="w-4 h-4"></i></button>
-                    <span class="px-2 border-l border-r border-gray-700 text-[10px]">100%</span>
-                    <button class="p-1 hover:text-white"><i data-lucide="zoom-in" class="w-4 h-4"></i></button>
-                </div>
-            </div>
-            <div class="flex-grow p-8 overflow-y-auto flex justify-center w-full" id="pdfContainer">
-                <!-- Mock PDF Page -->
-                <div class="bg-white w-full max-w-lg shadow-2xl relative transition-all duration-300 ease-in-out" style="height: 800px;">
-                    <!-- Highlight Box (Linked to red confidence issue) -->
-                    <div id="pdfFocusBox" class="focus-box absolute top-[280px] left-[40px] right-[40px] h-[60px] bg-amber-300/30 border-2 border-amber-400 group">
-                        <span id="pdfFocusIcon" class="absolute -top-3 -right-3 bg-amber-500 text-white rounded-full p-1 shadow transition-colors">
-                            <i data-lucide="alert-triangle" class="w-3 h-3 icon-alert"></i>
-                            <i data-lucide="check" class="w-3 h-3 hidden icon-check"></i>
-                        </span>
+    <main id="workspace" class="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+        <section class="grid gap-6 lg:workspace-grid">
+            <section class="overflow-hidden rounded-[32px] border border-white/80 bg-white/75 shadow-float backdrop-blur-xl">
+                <div class="flex items-center justify-between border-b border-ink/8 bg-ink px-5 py-4 text-white">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-sand/80">Source document</p>
+                        <h2 class="mt-1 text-lg font-bold">Page 14 of 92</h2>
                     </div>
-                    
-                    <!-- Mock Text -->
-                    <div class="p-10 text-gray-800">
-                        <h2 class="text-2xl font-bold border-b border-gray-900 pb-2 mb-6 pointer-events-none">Unit 3: Personal and Business Finance</h2>
-                        <b class="text-sm font-bold uppercase tracking-wider text-gray-500 pointer-events-none">Unit Reference Number</b>
-                        <p class="mb-4 pointer-events-none">T/507/5000</p>
-
-                        <b class="text-sm font-bold uppercase tracking-wider text-gray-500 pointer-events-none">Guided Learning Hours (GLH)</b>
-                        <p class="mb-4 text-xl font-bold bg-amber-100 inline-block px-1 transition-colors" id="pdfGlhText">120?</p>
-
-                        <b class="text-sm font-bold uppercase tracking-wider text-gray-500 pointer-events-none">Description</b>
-                        <p class="text-sm leading-relaxed mb-6 pointer-events-none">Learners study the purpose and importance of personal and business finance. They will develop the skills and knowledge needed to understand, analyse and prepare financial information.</p>
+                    <div class="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em]">
+                        <i data-lucide="scan-search" class="h-4 w-4"></i>
+                        Linked evidence view
                     </div>
                 </div>
-            </div>
-        </section>
 
-        <!-- Right Pane: Extracted Structure -->
-        <section class="w-1/2 bg-gray-50 overflow-y-auto">
-            <div class="p-6 max-w-3xl mx-auto pb-32">
-                <div class="mb-6 flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-gray-900">Extracted Hierarchy</h2>
-                    <span class="text-xs font-medium text-gray-500 flex items-center gap-1 bg-white px-2 py-1 rounded border border-gray-200">
-                        <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i> Click nodes to select
-                    </span>
-                </div>
-
-                <!-- Tree Root -->
-                <div class="relative w-full">
-                    
-                    <!-- Root Node: Qualification -->
-                    <div class="relative z-10 flex gap-3 mb-4 tree-node w-full">
-                        <div class="tree-line"></div>
-                        <div class="w-6 h-6 rounded border border-gray-300 bg-white flex items-center justify-center flex-shrink-0 mt-3 shadow-sm cursor-pointer hover:bg-gray-50" onclick="toggleTree(this)">
-                            <i data-lucide="minus" class="w-3 h-3 text-gray-500 minus-icon"></i>
-                            <i data-lucide="plus" class="w-3 h-3 text-gray-500 plus-icon hidden"></i>
-                        </div>
-                        <div class="flex-grow bg-white border border-gray-200 rounded-xl p-4 shadow-sm interactive-card" onclick="selectCard(this)">
-                            <div class="flex justify-between items-start mb-2">
-                                <span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-blue-200">Qualification</span>
-                                <span class="flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
-                                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> High Confidence
-                                </span>
+                <div class="h-[calc(100vh-178px)] overflow-y-auto p-6 scrollbar-thin">
+                    <div class="mx-auto max-w-2xl rounded-[28px] bg-white p-8 shadow-panel">
+                        <div class="mb-6 flex items-center justify-between border-b border-ink/8 pb-5">
+                            <div>
+                                <p class="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/48">Document section</p>
+                                <h3 class="mt-2 text-2xl font-extrabold text-ink">Unit 3: Personal and Business Finance</h3>
                             </div>
-                            <h3 class="font-semibold text-gray-900">Pearson BTEC Level 3 National Extended Diploma in Business</h3>
-                            <div class="mt-3 flex gap-6 text-sm">
-                                <div><span class="text-gray-500 block text-xs">Total Qual Time</span> <span class="font-medium">1080 Hours</span></div>
-                                <div><span class="text-gray-500 block text-xs">Level</span> <span class="font-medium">Level 3</span></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Level 2: Groups -->
-                    <div class="pl-9 relative tree-children">
-                                                
-                        <!-- Group 1 -->
-                        <div class="relative z-10 flex gap-3 mb-4 tree-node">
-                            <div class="tree-line"></div>
-                            <div class="w-6 h-6 rounded border border-gray-300 bg-white flex items-center justify-center flex-shrink-0 mt-3 shadow-sm cursor-pointer hover:bg-gray-50" onclick="toggleTree(this)">
-                                <i data-lucide="minus" class="w-3 h-3 text-gray-500 minus-icon"></i>
-                                <i data-lucide="plus" class="w-3 h-3 text-gray-500 plus-icon hidden"></i>
-                            </div>
-                            <div class="flex-grow bg-white border border-gray-200 rounded-xl p-4 shadow-sm interactive-card" onclick="selectCard(this)">
-                                <div class="flex justify-between items-start mb-2">
-                                    <span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-purple-200">Unit Group</span>
-                                </div>
-                                <h3 class="font-semibold text-gray-900">Mandatory Units</h3>
-                                <div class="mt-1 text-xs font-medium text-gray-600 bg-gray-50 inline-block px-2 py-1 rounded border border-gray-200">Rule: Must complete 7 units.</div>
-                            </div>
+                            <span class="rounded-full bg-sand px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember">Shared unit candidate</span>
                         </div>
 
-                        <!-- Level 3: Units under Group 1 -->
-                        <div class="pl-9 relative tree-children">
-                            <!-- Unit 1 (Perfect) -->
-                            <div class="relative z-10 flex gap-3 mb-4 tree-node">
-                                <div class="w-6 h-6 rounded-full border-2 border-gray-200 bg-gray-50 flex-shrink-0 mt-3 relative z-10 flex items-center justify-center">
-                                    <i data-lucide="check" class="text-gray-400 w-3 h-3"></i>
-                                </div>
-                                <div class="flex-grow bg-white border border-gray-200 rounded-xl p-3 shadow-sm interactive-card opacity-75 hover:opacity-100" onclick="selectCard(this)">
-                                    <div class="flex justify-between items-center">
-                                        <div class="text-sm font-medium text-gray-800">Unit 1: Exploring Business</div>
-                                        <div class="text-xs text-gray-400 bg-gray-100 px-2 rounded">GLH 90</div>
+                        <div class="space-y-6 text-sm leading-7 text-ink/78">
+                            <div id="highlight-unit" class="pdf-highlight rounded-[24px] border-2 border-ember/25 bg-ember/6 p-5">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/48">Guided learning hours</p>
+                                        <p class="mt-2 text-3xl font-extrabold text-ember">120?</p>
+                                    </div>
+                                    <div class="rounded-2xl bg-white px-4 py-3 shadow-sm">
+                                        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-ember">Blocker</p>
+                                        <p class="mt-1 text-sm text-ink/68">Smudged source text conflicts with group total.</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Unit 3 (Needs Validation) -->
-                            <div class="relative z-10 flex gap-3 mb-4 tree-node">
-                                <div id="unitIndicator" class="w-6 h-6 rounded-full border-2 border-amber-300 bg-amber-50 flex flex-shrink-0 mt-3 relative z-10 items-center justify-center transition-colors">
-                                   <i data-lucide="alert-triangle" class="w-3 h-3 text-amber-500 icon-alert"></i>
-                                   <i data-lucide="check" class="w-3 h-3 text-emerald-600 hidden icon-check"></i>
-                                </div>
-                                
-                                <div id="unitCard" class="flex-grow bg-white border-2 border-amber-400 rounded-xl p-4 shadow-md transition-all interactive-card" onclick="selectCard(this, true)">
-                                    <div class="flex justify-between items-start mb-2">
-                                        <span class="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border border-teal-200">Unit</span>
-                                        <span id="unitBadge" class="flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md border border-amber-200 uppercase tracking-wide transition-colors">
-                                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 icon-alert"></i>
-                                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 hidden icon-check"></i>
-                                            <span class="badge-text">Ambiguous</span>
-                                        </span>
+                            <p>Learners study the purpose and importance of personal and business finance. They will develop the skills and knowledge needed to understand, analyse, and prepare financial information across both personal and business contexts.</p>
+
+                            <div id="highlight-outcome" class="pdf-highlight rounded-[24px] border-2 border-ink/10 bg-fog/70 p-5">
+                                <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/48">Learning outcome</p>
+                                <p class="mt-2 text-lg font-bold text-ink">A: Explore the personal finance sector and services for individuals.</p>
+                                <p class="mt-3 text-sm text-ink/68">Outcome numbering is clear in the source and maps to the qualification review graph.</p>
+                            </div>
+
+                            <div id="highlight-criterion" class="pdf-highlight rounded-[24px] border-2 border-ink/10 bg-fog/70 p-5">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/48">Assessment criterion</p>
+                                        <p class="mt-2 text-lg font-bold text-ink">A.P1 Explain the different features of personal current accounts.</p>
                                     </div>
-                                    
-                                    <h3 class="font-semibold text-gray-900 text-[15px]">Unit 3: Personal and Business Finance</h3>
-                                    
-                                    <div class="mt-3 flex gap-3 text-sm bg-gray-50 p-2.5 rounded-lg border border-gray-200">
-                                        <div class="flex-1">
-                                            <span class="text-gray-500 block text-[11px] uppercase tracking-wider font-semibold mb-1">Reference No</span> 
-                                            <span class="font-medium text-gray-900">T/507/5000</span>
+                                    <div class="rounded-full border border-ink/10 bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-tide">Command verb: Explain</div>
+                                </div>
+                                <p class="mt-3 text-sm text-ink/68">The extracted verb is correct, but the grade level needs confirmation because the source line wraps across two columns.</p>
+                            </div>
+
+                            <div id="highlight-rule" class="pdf-highlight rounded-[24px] border-2 border-ink/10 bg-fog/70 p-5">
+                                <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/48">Qualification rule excerpt</p>
+                                <p class="mt-2 text-lg font-bold text-ink">Learners must complete all mandatory units and a minimum of 4 optional credits from Group B.</p>
+                                <p class="mt-3 text-sm text-ink/68">Optional-group logic is linked to both qualifications, which is why unresolved totals block approval.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="overflow-hidden rounded-[32px] border border-white/80 bg-white/80 shadow-float backdrop-blur-xl">
+                <div class="h-[calc(100vh-178px)] overflow-y-auto p-6 scrollbar-thin">
+                    <div class="space-y-6">
+                        <section class="rounded-[28px] border border-ink/8 bg-dusk p-5 shadow-panel">
+                            <div class="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                    <p class="text-sm font-semibold uppercase tracking-[0.22em] text-tide">Validation summary</p>
+                                    <h2 class="mt-2 text-2xl font-extrabold text-ink">Review blockers and warnings</h2>
+                                </div>
+                                <div class="grid min-w-[240px] grid-cols-3 gap-3 text-center">
+                                    <div class="rounded-2xl bg-white px-3 py-3 shadow-sm">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Qualifications</p>
+                                        <p class="mt-1 text-2xl font-extrabold text-ink">2</p>
+                                    </div>
+                                    <div class="rounded-2xl bg-white px-3 py-3 shadow-sm">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Shared units</p>
+                                        <p class="mt-1 text-2xl font-extrabold text-ink">1</p>
+                                    </div>
+                                    <div class="rounded-2xl bg-white px-3 py-3 shadow-sm">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Edited nodes</p>
+                                        <p class="mt-1 text-2xl font-extrabold text-ink">3</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-5 grid gap-3">
+                                <button class="validation-link active flex items-start justify-between rounded-[22px] border border-ember/18 bg-white px-4 py-4 text-left shadow-sm" data-target="entity-unit" data-highlight="highlight-unit">
+                                    <span>
+                                        <span class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ember"><i data-lucide="alert-octagon" class="h-4 w-4"></i>Blocker</span>
+                                        <span class="mt-2 block text-base font-bold text-ink">GLH mismatch on shared Unit 3</span>
+                                        <span class="mt-1 block text-sm text-ink/65">The extracted value conflicts with the document total for both linked qualifications.</span>
+                                    </span>
+                                    <span class="rounded-full bg-ember/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember">Needs action</span>
+                                </button>
+
+                                <button class="validation-link flex items-start justify-between rounded-[22px] border border-ember/18 bg-white px-4 py-4 text-left shadow-sm" data-target="entity-rule" data-highlight="highlight-rule">
+                                    <span>
+                                        <span class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ember"><i data-lucide="ban" class="h-4 w-4"></i>Blocker</span>
+                                        <span class="mt-2 block text-base font-bold text-ink">Optional-group credits not fully satisfied</span>
+                                        <span class="mt-1 block text-sm text-ink/65">Group B minimum credits are under the current extracted total.</span>
+                                    </span>
+                                    <span class="rounded-full bg-ember/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember">Override possible</span>
+                                </button>
+
+                                <button class="validation-link flex items-start justify-between rounded-[22px] border border-ink/10 bg-white px-4 py-4 text-left shadow-sm" data-target="entity-criterion" data-highlight="highlight-criterion">
+                                    <span>
+                                        <span class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-tide"><i data-lucide="triangle-alert" class="h-4 w-4"></i>Warning</span>
+                                        <span class="mt-2 block text-base font-bold text-ink">Criterion grade level needs confirmation</span>
+                                        <span class="mt-1 block text-sm text-ink/65">Command verb is captured, but the grade boundary is still medium confidence.</span>
+                                    </span>
+                                    <span class="rounded-full bg-tide/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-tide">Reviewable</span>
+                                </button>
+                            </div>
+                        </section>
+
+                        <section class="rounded-[28px] border border-ink/8 bg-white p-5 shadow-panel">
+                            <div class="flex flex-wrap items-center justify-between gap-4">
+                                <div>
+                                    <p class="text-sm font-semibold uppercase tracking-[0.22em] text-tide">Qualification split</p>
+                                    <h2 class="mt-2 text-xl font-extrabold text-ink">Document summary</h2>
+                                </div>
+                                <div class="flex flex-wrap gap-2" role="tablist" aria-label="Qualification tabs">
+                                    <button class="qualification-tab active rounded-full border border-ink/10 px-4 py-2 text-sm font-bold" data-qualification="extended">Extended Diploma</button>
+                                    <button class="qualification-tab rounded-full border border-ink/10 bg-white px-4 py-2 text-sm font-bold text-ink" data-qualification="foundation">Foundation Diploma</button>
+                                </div>
+                            </div>
+
+                            <div class="mt-5 grid gap-4 lg:grid-cols-3">
+                                <article class="rounded-[24px] bg-fog/75 p-4">
+                                    <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Current qualification</p>
+                                    <p id="qualificationName" class="mt-2 text-lg font-bold text-ink">Pearson BTEC Level 3 National Extended Diploma in Business</p>
+                                </article>
+                                <article class="rounded-[24px] bg-fog/75 p-4">
+                                    <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Credits</p>
+                                    <p id="qualificationCredits" class="mt-2 text-3xl font-extrabold text-ink">180</p>
+                                </article>
+                                <article class="rounded-[24px] bg-fog/75 p-4">
+                                    <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Mandatory units</p>
+                                    <p id="qualificationUnits" class="mt-2 text-3xl font-extrabold text-ink">7</p>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="space-y-4">
+                            <article id="entity-unit" class="entity-card active rounded-[28px] border-2 border-tide/30 bg-white p-5 shadow-panel">
+                                <div class="flex flex-wrap items-start justify-between gap-4">
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="rounded-full bg-ink px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white">Shared unit</span>
+                                            <span class="rounded-full bg-ember/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember">Blocker</span>
                                         </div>
-                                        <div class="flex-1 border-l border-gray-200 pl-3">
-                                            <span id="glhLabel" class="text-amber-700 block text-[11px] uppercase tracking-wider font-bold mb-1 transition-colors flex items-center gap-1">
-                                                GLH (Verify) <i data-lucide="help-circle" class="w-3 h-3"></i>
-                                            </span> 
-                                            <div class="flex items-center gap-2">
-                                                <input type="text" id="glhInput" value="120" class="border border-amber-400 rounded px-2 py-1 bg-white font-medium text-gray-900 text-sm w-16 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors">
-                                                <button id="btnVerify" onclick="handleVerify(event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-semibold px-2 py-1 rounded border border-amber-300 transition-colors">Verify</button>
+                                        <h3 class="mt-3 text-xl font-extrabold text-ink">Unit 3: Personal and Business Finance</h3>
+                                        <p class="mt-2 text-sm leading-6 text-ink/68">Appears in both qualifications. Changes can be applied to the canonical unit or to one qualification-specific membership.</p>
+                                    </div>
+                                    <button class="rounded-full border border-ink/10 bg-white px-4 py-2 text-sm font-bold text-ink shadow-sm transition hover:border-ink/20 hover:bg-fog">Edit canonical unit</button>
+                                </div>
+
+                                <div class="mt-5 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+                                    <div class="rounded-[24px] bg-dusk p-4">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Shared across</p>
+                                                <p class="mt-2 text-base font-bold text-ink">2 qualifications</p>
                                             </div>
+                                            <i data-lucide="link-2" class="h-5 w-5 text-tide"></i>
                                         </div>
+                                        <ul class="mt-4 space-y-3 text-sm text-ink/72">
+                                            <li class="rounded-2xl bg-white px-4 py-3 shadow-sm">Extended Diploma -> Mandatory Group -> GLH currently 120?</li>
+                                            <li class="rounded-2xl bg-white px-4 py-3 shadow-sm">Foundation Diploma -> Core Group -> GLH currently 120?</li>
+                                        </ul>
                                     </div>
-                                    
-                                    <div id="unitWarning" class="mt-3 text-xs font-medium text-amber-700 flex items-start gap-1.5 bg-amber-50 rounded p-2 border border-amber-100">
-                                        <i data-lucide="info" class="w-4 h-4 flex-shrink-0"></i>
-                                        <span>AI extracted an ambiguous trailing character ("120?"). Source contains smudged text. Please verify formatting.</span>
+
+                                    <div class="rounded-[24px] border border-ember/18 bg-ember/6 p-4">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Validation fix</p>
+                                                <p class="mt-2 text-base font-bold text-ink">Resolve the GLH blocker</p>
+                                            </div>
+                                            <span class="rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember">Required</span>
+                                        </div>
+                                        <label for="glhInput" class="mt-4 block text-sm font-semibold text-ink">Guided learning hours</label>
+                                        <div class="mt-2 flex flex-wrap items-center gap-3">
+                                            <input id="glhInput" type="text" value="120" class="w-28 rounded-2xl border border-ember/30 bg-white px-4 py-3 text-lg font-bold text-ink outline-none ring-0 transition focus:border-tide">
+                                            <button type="button" onclick="resolveGlh()" class="rounded-full bg-ember px-5 py-3 text-sm font-bold text-white transition hover:bg-ember/90">Verify shared unit</button>
+                                        </div>
+                                        <p id="glhHelp" class="mt-3 text-sm text-ember">This value currently conflicts with the source excerpt and the qualification aggregate totals.</p>
                                     </div>
                                 </div>
-                            </div>
-                        </div> <!-- End Level 3 -->
-                    </div> <!-- End Level 2 -->
-                </div> <!-- End Tree Root -->
+                            </article>
 
-            </div>
+                            <article id="entity-outcome" class="entity-card rounded-[28px] border border-ink/8 bg-white p-5 shadow-panel">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <span class="rounded-full bg-tide/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-tide">Learning outcome</span>
+                                        <h3 class="mt-3 text-xl font-extrabold text-ink">Outcome A: Explore the personal finance sector and services for individuals</h3>
+                                    </div>
+                                    <button class="rounded-full border border-ink/10 bg-white px-4 py-2 text-sm font-bold text-ink shadow-sm transition hover:border-ink/20 hover:bg-fog">Jump to source</button>
+                                </div>
+                                <p class="mt-3 text-sm leading-6 text-ink/68">Outcome linkage is stable. The review concern lives one level deeper in criterion grading, not in the parent outcome text.</p>
+                            </article>
+
+                            <article id="entity-criterion" class="entity-card rounded-[28px] border border-ink/8 bg-white p-5 shadow-panel">
+                                <div class="flex flex-wrap items-start justify-between gap-4">
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="rounded-full bg-fog px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ink">Assessment criterion</span>
+                                            <span id="criterionBadge" class="rounded-full bg-tide/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-tide">Warning</span>
+                                        </div>
+                                        <h3 class="mt-3 text-xl font-extrabold text-ink">A.P1 Explain the different features of personal current accounts</h3>
+                                        <p class="mt-2 text-sm leading-6 text-ink/68">The extracted command verb is preserved. Grade level confirmation is still reviewer-visible until you validate it.</p>
+                                    </div>
+                                    <button type="button" onclick="confirmCriterion()" class="rounded-full border border-tide/20 bg-tide/8 px-4 py-2 text-sm font-bold text-tide transition hover:border-tide/30 hover:bg-tide/12">Confirm criterion</button>
+                                </div>
+                                <div class="mt-5 grid gap-4 sm:grid-cols-3">
+                                    <div class="rounded-[22px] bg-fog/75 p-4">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Grade level</p>
+                                        <p id="criterionGrade" class="mt-2 text-2xl font-extrabold text-ember">P1?</p>
+                                    </div>
+                                    <div class="rounded-[22px] bg-fog/75 p-4">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Command verb</p>
+                                        <p class="mt-2 text-2xl font-extrabold text-ink">Explain</p>
+                                    </div>
+                                    <div class="rounded-[22px] bg-fog/75 p-4">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Confidence</p>
+                                        <p id="criterionConfidence" class="mt-2 text-2xl font-extrabold text-tide">78%</p>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article id="entity-rule" class="entity-card rounded-[28px] border border-ink/8 bg-white p-5 shadow-panel">
+                                <div class="flex flex-wrap items-start justify-between gap-4">
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="rounded-full bg-ink px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white">Qualification rule</span>
+                                            <span class="rounded-full bg-ember/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember">Override optional</span>
+                                        </div>
+                                        <h3 class="mt-3 text-xl font-extrabold text-ink">Optional Group B minimum credit rule</h3>
+                                        <p class="mt-2 text-sm leading-6 text-ink/68">Current extracted membership does not satisfy the minimum optional credits for the foundation pathway.</p>
+                                    </div>
+                                    <button class="rounded-full border border-ink/10 bg-white px-4 py-2 text-sm font-bold text-ink shadow-sm transition hover:border-ink/20 hover:bg-fog">Review memberships</button>
+                                </div>
+
+                                <div class="mt-5 grid gap-4 lg:grid-cols-2">
+                                    <div class="rounded-[22px] bg-fog/75 p-4">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Rule state</p>
+                                        <p id="ruleState" class="mt-2 text-2xl font-extrabold text-ember">3 of 4 credits satisfied</p>
+                                        <p class="mt-2 text-sm text-ink/68">Reviewer can fix the extracted membership list or supply an override rationale if the source rule is intentionally handled elsewhere.</p>
+                                    </div>
+                                    <div class="rounded-[22px] border border-ink/8 bg-white p-4">
+                                        <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-ink/45">Override path</p>
+                                        <div class="mt-3 flex items-center gap-3">
+                                            <button id="overrideToggle" type="button" onclick="toggleOverride()" class="approval-toggle rounded-full border border-ink/10 bg-fog px-4 py-2 text-sm font-bold text-ink">Allow policy override</button>
+                                            <span id="overrideStatus" class="text-sm font-semibold text-ink/55">Disabled</span>
+                                        </div>
+                                        <label for="overrideReason" class="mt-4 block text-sm font-semibold text-ink">Override rationale</label>
+                                        <textarea id="overrideReason" rows="3" disabled class="mt-2 w-full rounded-[20px] border border-ink/10 bg-fog/80 px-4 py-3 text-sm text-ink outline-none transition focus:border-tide" placeholder="Document why approval can proceed despite the remaining blocker."></textarea>
+                                    </div>
+                                </div>
+                            </article>
+                        </section>
+
+                        <section class="rounded-[28px] border border-ink/8 bg-ink p-5 text-white shadow-panel">
+                            <div class="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                    <p class="text-sm font-semibold uppercase tracking-[0.22em] text-sand/80">Approval panel</p>
+                                    <h2 class="mt-2 text-2xl font-extrabold">Submission controls</h2>
+                                </div>
+                                <div class="rounded-2xl bg-white/10 px-4 py-3 text-sm">
+                                    <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-sand/70">Current status</p>
+                                    <p id="approvalSummary" class="mt-1 font-bold text-sand">1 blocker unresolved, override not enabled</p>
+                                </div>
+                            </div>
+                            <div class="mt-5 grid gap-4 lg:grid-cols-3">
+                                <div class="rounded-[22px] bg-white/8 p-4">
+                                    <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-sand/70">Edited entities</p>
+                                    <p class="mt-2 text-3xl font-extrabold">3</p>
+                                </div>
+                                <div class="rounded-[22px] bg-white/8 p-4">
+                                    <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-sand/70">Shared-unit decisions</p>
+                                    <p class="mt-2 text-3xl font-extrabold">1</p>
+                                </div>
+                                <div class="rounded-[22px] bg-white/8 p-4">
+                                    <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-sand/70">Persist path</p>
+                                    <p class="mt-2 text-3xl font-extrabold">API only</p>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </section>
         </section>
     </main>
 
     <script>
-        // Init icons
         lucide.createIcons();
 
-        // UI toggles
-        function toggleTree(element) {
-            const minus = element.querySelector('.minus-icon');
-            const plus = element.querySelector('.plus-icon');
-            // Element is the div wrapping the icon. The tree-children is a sibling of the parent.
-            const wrapper = element.closest('.tree-node');
-            const children = wrapper.nextElementSibling;
-            
-            if(children && children.classList.contains('tree-children')) {
-                children.classList.toggle('collapsed');
-                if(children.classList.contains('collapsed')) {
-                    minus.classList.add('hidden');
-                    plus.classList.remove('hidden');
-                } else {
-                    plus.classList.add('hidden');
-                    minus.classList.remove('hidden');
-                }
+        const qualificationData = {
+            extended: {
+                name: 'Pearson BTEC Level 3 National Extended Diploma in Business',
+                credits: '180',
+                units: '7'
+            },
+            foundation: {
+                name: 'Pearson BTEC Level 3 National Foundation Diploma in Business',
+                credits: '120',
+                units: '5'
             }
-        }
+        };
 
-        function selectCard(element, triggerFocus = false) {
-            // Remove selection from all
-            document.querySelectorAll('.interactive-card').forEach(el => {
-                el.classList.remove('ring-2', 'ring-primary-400', 'border-primary-500');
+        let glhResolved = false;
+        let criterionResolved = false;
+        let overrideEnabled = false;
+
+        const validationLinks = Array.from(document.querySelectorAll('.validation-link'));
+        const entityCards = Array.from(document.querySelectorAll('.entity-card'));
+        const qualificationTabs = Array.from(document.querySelectorAll('.qualification-tab'));
+        const approveButton = document.getElementById('approveButton');
+        const overrideReason = document.getElementById('overrideReason');
+        const overrideStatus = document.getElementById('overrideStatus');
+        const approvalSummary = document.getElementById('approvalSummary');
+        const headerState = document.getElementById('headerState');
+        const toast = document.getElementById('toast');
+
+        validationLinks.forEach(function (button) {
+            button.addEventListener('click', function () {
+                setActiveValidation(button);
+                focusEntity(button.dataset.target, button.dataset.highlight);
             });
-            // Add to clicked
-            element.classList.add('ring-2', 'ring-primary-400', 'border-primary-500');
-            
-            // If it's the specific unit we are mocking, flash the PDF highlight
-            if(triggerFocus) {
-                const pdfBox = document.getElementById('pdfFocusBox');
-                pdfBox.classList.add('focus-box-active');
-                setTimeout(() => {
-                    pdfBox.classList.remove('focus-box-active');
-                }, 800);
+        });
+
+        qualificationTabs.forEach(function (button) {
+            button.addEventListener('click', function () {
+                qualificationTabs.forEach(function (tab) {
+                    tab.classList.remove('active');
+                });
+                button.classList.add('active');
+                const key = button.dataset.qualification;
+                document.getElementById('qualificationName').textContent = qualificationData[key].name;
+                document.getElementById('qualificationCredits').textContent = qualificationData[key].credits;
+                document.getElementById('qualificationUnits').textContent = qualificationData[key].units;
+            });
+        });
+
+        function setActiveValidation(activeButton) {
+            validationLinks.forEach(function (button) {
+                button.classList.remove('active');
+            });
+            activeButton.classList.add('active');
+        }
+
+        function focusEntity(entityId, highlightId) {
+            entityCards.forEach(function (card) {
+                card.classList.remove('active');
+            });
+
+            document.querySelectorAll('.pdf-highlight').forEach(function (highlight) {
+                highlight.classList.remove('active');
+            });
+
+            const entity = document.getElementById(entityId);
+            const highlight = document.getElementById(highlightId);
+
+            if (entity) {
+                entity.classList.add('active');
+                entity.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            if (highlight) {
+                highlight.classList.add('active');
             }
         }
 
-        // Fix Workflow Action
-        function handleVerify(event) {
-            event.stopPropagation(); // prevent card select logic
-            
-            const card = document.getElementById('unitCard');
-            const indicator = document.getElementById('unitIndicator');
-            const input = document.getElementById('glhInput');
-            const btn = document.getElementById('btnVerify');
-            const warning = document.getElementById('unitWarning');
-            const badge = document.getElementById('unitBadge');
-            const label = document.getElementById('glhLabel');
-            const pdfBox = document.getElementById('pdfFocusBox');
-            const pdfIcon = document.getElementById('pdfFocusIcon');
-            const pdfText = document.getElementById('pdfGlhText');
-
-            // 1. Update main card style
-            card.classList.remove('border-amber-400');
-            card.classList.add('border-emerald-200', 'ring-2', 'ring-emerald-100'); // make it look verified
-            
-            // 2. Update Indicator dot
-            indicator.classList.remove('border-amber-300', 'bg-amber-50');
-            indicator.classList.add('border-emerald-300', 'bg-emerald-50');
-            indicator.querySelector('.icon-alert').classList.add('hidden');
-            indicator.querySelector('.icon-check').classList.remove('hidden');
-
-            // 3. Update Badge
-            badge.classList.remove('bg-amber-100', 'text-amber-800', 'border-amber-200');
-            badge.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
-            badge.querySelector('.icon-alert').classList.add('hidden');
-            badge.querySelector('.icon-check').classList.remove('hidden');
-            badge.querySelector('.badge-text').innerText = 'Verified';
-
-            // 4. Update Input area
-            input.classList.remove('border-amber-400');
-            input.classList.add('border-emerald-200', 'bg-gray-50', 'text-emerald-800');
-            input.setAttribute('readonly', 'true');
-            btn.classList.add('hidden'); // Hide verify button
-            label.classList.remove('text-amber-700');
-            label.classList.add('text-gray-500');
-            label.innerHTML = 'GLH (Verified) <svg class="lucide lucide-check w-3 h-3 text-emerald-500"><path d="M20 6 9 17l-5-5"></path></svg>';
-            
-            // Hide Warning
-            warning.classList.add('hidden');
-
-            // 5. Update PDF Mock Highlight
-            pdfBox.classList.remove('bg-amber-300/30', 'border-amber-400');
-            pdfBox.classList.add('bg-emerald-300/20', 'border-emerald-400');
-            pdfIcon.classList.remove('bg-amber-500');
-            pdfIcon.classList.add('bg-emerald-500');
-            pdfIcon.querySelector('.icon-alert').classList.add('hidden');
-            pdfIcon.querySelector('.icon-check').classList.remove('hidden');
-            pdfText.innerText = input.value;
-            pdfText.classList.remove('bg-amber-100');
-            pdfText.classList.add('bg-emerald-100', 'text-emerald-800');
-            
-            // 6. Update Global Header Status
-            const headerBadge = document.getElementById('headerBadge');
-            headerBadge.classList.remove('bg-amber-100', 'text-amber-800', 'border-amber-200');
-            headerBadge.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
-            headerBadge.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 mr-1 inline"></i> Ready to Persist';
-            lucide.createIcons();
+        function resolveGlh() {
+            glhResolved = true;
+            document.getElementById('glhInput').value = '120';
+            document.getElementById('glhInput').setAttribute('readonly', 'true');
+            document.getElementById('glhInput').className = 'w-28 rounded-2xl border border-moss/25 bg-white px-4 py-3 text-lg font-bold text-moss outline-none';
+            document.getElementById('glhHelp').textContent = 'Shared-unit GLH verified. Both linked qualifications now reference the same canonical value.';
+            document.getElementById('glhHelp').className = 'mt-3 text-sm text-moss';
+            updateApprovalState();
         }
 
-        // Approve Workflow Action
+        function confirmCriterion() {
+            criterionResolved = true;
+            document.getElementById('criterionBadge').textContent = 'Verified';
+            document.getElementById('criterionBadge').className = 'rounded-full bg-moss/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-moss';
+            document.getElementById('criterionGrade').textContent = 'P1';
+            document.getElementById('criterionGrade').className = 'mt-2 text-2xl font-extrabold text-moss';
+            document.getElementById('criterionConfidence').textContent = '95%';
+            updateApprovalState();
+        }
+
+        function toggleOverride() {
+            overrideEnabled = !overrideEnabled;
+            const toggle = document.getElementById('overrideToggle');
+
+            if (overrideEnabled) {
+                toggle.classList.add('active');
+                overrideReason.disabled = false;
+                overrideStatus.textContent = 'Enabled';
+                overrideStatus.className = 'text-sm font-semibold text-moss';
+            } else {
+                toggle.classList.remove('active');
+                overrideReason.disabled = true;
+                overrideReason.value = '';
+                overrideStatus.textContent = 'Disabled';
+                overrideStatus.className = 'text-sm font-semibold text-ink/55';
+            }
+
+            updateApprovalState();
+        }
+
+        overrideReason.addEventListener('input', updateApprovalState);
+
+        function updateApprovalState() {
+            const remainingBlocker = !glhResolved;
+            const overrideReady = overrideEnabled && overrideReason.value.trim().length >= 12;
+            const canApprove = !remainingBlocker || overrideReady;
+
+            approveButton.disabled = !canApprove;
+
+            if (canApprove) {
+                approveButton.classList.remove('opacity-50');
+                approveButton.classList.add('hover:bg-ink/90');
+                headerState.textContent = overrideReady && remainingBlocker ? 'Override ready' : 'Ready to persist';
+                headerState.className = 'rounded-full border border-moss/20 bg-moss/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-moss';
+                approvalSummary.textContent = overrideReady && remainingBlocker
+                    ? '1 blocker remains but override rationale satisfies policy gating'
+                    : 'Core blockers are cleared. Submission can proceed.';
+            } else {
+                approveButton.classList.add('opacity-50');
+                approveButton.classList.remove('hover:bg-ink/90');
+                headerState.textContent = 'Approval blocked';
+                headerState.className = 'rounded-full border border-ember/20 bg-ember/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ember';
+                approvalSummary.textContent = remainingBlocker
+                    ? '1 blocker unresolved, override not enabled'
+                    : 'Override rationale must be at least 12 characters';
+            }
+        }
+
         function handleApprove() {
-            const btn = document.getElementById('btnApprove');
-            const toast = document.getElementById('toast');
-            
-            btn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Persisting...';
-            btn.classList.add('opacity-90', 'pointer-events-none');
-            
-            setTimeout(() => {
-                toast.classList.add('show');
-                btn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i> Approve & Persist';
-                btn.classList.remove('opacity-90', 'pointer-events-none');
+            if (approveButton.disabled) {
+                return;
+            }
+
+            approveButton.textContent = 'Persisting...';
+            approveButton.disabled = true;
+
+            window.setTimeout(function () {
+                toast.classList.remove('hidden');
                 lucide.createIcons();
-                
-                setTimeout(() => {
+                window.setTimeout(function () {
                     window.location.href = 'index.html';
-                }, 2000);
-            }, 1000);
+                }, 1800);
+            }, 700);
         }
+
+        updateApprovalState();
     </script>
 </body>
 </html>
