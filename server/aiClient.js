@@ -155,6 +155,43 @@ function normalizeContent(content) {
   return "";
 }
 
+function getResponseText(response) {
+  if (response && typeof response.output_text === "string" && response.output_text.trim()) {
+    return response.output_text;
+  }
+
+  const outputs = Array.isArray(response && response.output) ? response.output : [];
+  for (const output of outputs) {
+    const contentItems = Array.isArray(output && output.content) ? output.content : [];
+    for (const item of contentItems) {
+      if (item && item.type === "refusal") {
+        throw new Error(item.refusal || "AI refused to extract qualification data from the PDF.");
+      }
+      if (item && item.type === "output_text" && typeof item.text === "string") {
+        return item.text;
+      }
+    }
+  }
+
+  if (response && response.error && response.error.message) {
+    throw new Error(response.error.message);
+  }
+
+  return "";
+}
+
+function buildPdfInput(fileName, pdfBuffer) {
+  if (!Buffer.isBuffer(pdfBuffer) || !pdfBuffer.length) {
+    throw new Error("PDF input is required for AI extraction.");
+  }
+
+  return {
+    type: "input_file",
+    filename: fileName || "qualification.pdf",
+    file_data: pdfBuffer.toString("base64")
+  };
+}
+
 function validateAiPayload(payload) {
   if (!payload || typeof payload !== "object") {
     throw new Error("AI response was empty.");
@@ -234,52 +271,54 @@ async function runAiConnectivityCheck(options = {}) {
   });
 }
 
-async function extractQualificationWithAi({ fileName, documentText, fallbackDraft, client: injectedClient }) {
+async function extractQualificationWithAi({ fileName, pdfBuffer, extractionContext, client: injectedClient }) {
   return tracer.startActiveSpan("qualextract.ai.extract", async (span) => {
     const prompt = readPrompt();
     const schema = readSchema();
     const model = getModelName();
     const provider = getAiProviderName();
     const clientInstance = injectedClient || getClient();
-    const truncatedText = String(documentText || "").slice(0, 20000);
 
     span.setAttribute("qualextract.provider", provider);
     span.setAttribute("qualextract.model", model);
     span.setAttribute("qualextract.file_name", fileName);
-    span.setAttribute("qualextract.input_chars", truncatedText.length);
+    span.setAttribute("qualextract.input_bytes", Buffer.isBuffer(pdfBuffer) ? pdfBuffer.length : 0);
 
     try {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
-          const completion = await clientInstance.chat.completions.create({
+          const response = await clientInstance.responses.create({
             model,
             temperature: 0.1,
-            response_format: {
-              type: "json_schema",
-              json_schema: {
+            instructions: prompt,
+            input: [
+              {
+                role: "user",
+                content: [
+                  buildPdfInput(fileName, pdfBuffer),
+                  {
+                    type: "input_text",
+                    text: JSON.stringify({
+                      fileName,
+                      sourceDocument: "attached PDF file"
+                    })
+                  }
+                ]
+              }
+            ],
+            text: {
+              format: {
+                type: "json_schema",
                 name: "qualification_extraction",
+                strict: true,
                 schema
               }
             },
-            messages: [
-              { role: "system", content: prompt },
-              {
-                role: "user",
-                content: JSON.stringify({
-                  fileName,
-                  documentText: truncatedText,
-                  fallbackQualificationCode: fallbackDraft.qualificationCode,
-                  fallbackQualificationName: fallbackDraft.qualification.title
-                })
-              }
-            ]
           });
 
-          const content = normalizeContent(completion.choices[0] && completion.choices[0].message
-            ? completion.choices[0].message.content
-            : "");
+          const content = normalizeContent(getResponseText(response));
           const payload = validateAiPayload(JSON.parse(content));
-          const normalizedDraft = normalizeAuthoritativeAiPayload(payload, fallbackDraft);
+          const normalizedDraft = normalizeAuthoritativeAiPayload(payload, extractionContext);
           span.setAttribute(
             "qualextract.authoritative_qualification_count",
             payload.Qualifications.qualifications.length

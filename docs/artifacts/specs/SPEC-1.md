@@ -168,9 +168,10 @@ sequenceDiagram
 | Browser app | Keep current web review application | No architectural change required in the reviewer experience |
 | Application API | Keep Node.js API as the system entrypoint | Continues to own upload, job state, review, approval, and persistence orchestration |
 | Extraction worker | Keep extraction orchestration in Node.js | Existing `server/extractionService.js` remains the workflow boundary |
-| AI provider | Replace direct provider coupling with an Azure AI Foundry adapter | Foundry becomes the managed model and evaluation control plane |
+| AI provider | Use an OpenAI-compatible provider adapter that can call Azure AI Foundry or OpenAI Responses API endpoints | The worker sends the uploaded PDF artifact directly to the configured model |
 | Prompt and schema assets | Keep prompt markdown and JSON schema assets in the repo | The external authoritative schema remains version-controlled separately from the internal normalized review contract |
-| Fallback extraction | Keep heuristic parser as a resilience path | Local development and degraded-mode extraction should continue to work without cloud AI |
+| Compatibility boundary | Keep deterministic normalization in `server/aiDraftNormalizer.js` | The review workspace continues to consume the internal graph even though the model returns the authoritative contract |
+| Local PDF analysis | Keep lightweight `pdf-parse` usage for metadata only | Page count and source excerpt are derived locally, but qualification structure is not |
 | Observability | Extend OpenTelemetry to Azure Application Insights | Preserve current tracing model while moving telemetry to a centralized backend |
 | Evaluation | Add Foundry evaluation runs before model changes | Use schema compliance, completeness, and quality thresholds before promotion |
 
@@ -191,11 +192,11 @@ This target keeps the current application architecture intact while moving model
 | HTTP layer | `node:http` | No Express or full backend framework is currently used |
 | Database | SQLite via `node:sqlite` | Local relational persistence for jobs, drafts, and approved qualification data |
 | File storage | Local filesystem | Uploaded PDFs retained in a server-side uploads folder for one day |
-| PDF extraction | `pdf-parse` | Used to recover text before heuristic or AI-based extraction |
-| AI extraction | Provider adapter over the OpenAI-compatible SDK | Supports direct OpenAI configuration today and Azure AI Foundry through a provider-specific endpoint and key |
-| AI prompt contract | Authoritative prompt plus authoritative structured-output schema, then normalized internal review graph | External and internal contracts are intentionally separated so prompt evolution does not directly break review consumers |
+| PDF analysis | `pdf-parse` | Used only for page count and source excerpt metadata; not used to generate qualification structures |
+| AI extraction | Provider adapter over the OpenAI-compatible SDK Responses API | Sends the uploaded PDF artifact as `input_file` and enforces a strict authoritative JSON schema |
+| AI prompt contract | Authoritative prompt plus authoritative structured-output schema, then normalized internal review graph | The attached PDF is the only extraction evidence source, and the normalizer isolates review consumers from prompt evolution |
 | Observability | OpenTelemetry API and Node tracer provider | Current tracing is focused on AI extraction spans |
-| Testing | Node built-in test runner | Covers workflow state, extraction fallback, and normalized persistence |
+| Testing | Node built-in test runner | Covers workflow state, direct-PDF AI extraction, no-heuristic pending drafts, and normalized persistence |
 
 ### 4.2 Current implementation artifacts
 
@@ -232,7 +233,7 @@ This target keeps the current application architecture intact while moving model
 | SQLite first | Gives relational integrity without external infrastructure |
 | File-based prompt and schema assets | Keeps AI behavior reviewable and version-controlled |
 | Vanilla frontend | Avoids framework overhead while the workflow is still being shaped |
-| OpenAI-compatible extraction path with fallback parser | Allows real AI extraction when configured without blocking local development |
+| OpenAI-compatible Responses API path with direct PDF input | Keeps the extraction evidence source aligned with the uploaded artifact and avoids maintaining a parallel heuristic parser |
 
 ### 4.5 Recommended Azure transition path
 
@@ -243,7 +244,7 @@ This target keeps the current application architecture intact while moving model
 | Prompting | Existing repo prompt plus JSON schema contract | Planner-based or multi-agent prompt sets |
 | Evaluation | Foundry evals plus repo regression fixtures | Full autonomous optimization loop |
 | Telemetry | OpenTelemetry exported to Application Insights | Cross-service distributed traces across multiple AI workers |
-| Workflow complexity | Single structured extraction call plus fallback parser | Multi-step agent workflow with tool orchestration |
+| Workflow complexity | Single structured extraction call with direct PDF file input | Multi-step agent workflow with tool orchestration |
 
 The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.js plus MAF. MAF becomes justified only if extraction evolves into a separate AI workflow service with tool-calling, reflection, or multi-stage review and refinement loops.
 
@@ -282,16 +283,18 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 | Artifact lifecycle | Store uploads and transient extracted artifacts with retention policy |
 | Queue dispatch | Decouple user upload from extraction execution |
 | Retry coordination | Retry transient failures safely |
+| Metadata enrichment | Derive page count and source excerpt from the uploaded PDF without producing a heuristic qualification draft |
 
 ### 5.4 Extraction Worker
 
 | Stage | Responsibility |
 |------|----------------|
-| Provider invocation | Call managed document AI through the adapter |
-| Normalization | Convert provider output into internal extraction elements |
-| Schema mapping | Map elements to qualifications, shared units, outcomes, criteria, and rule entities |
+| Provider invocation | Call the configured Responses API endpoint with the uploaded PDF artifact attached as `input_file` |
+| Authoritative contract validation | Parse and validate the model response against the authoritative `Qualifications` schema |
+| Normalization | Convert authoritative provider output into the internal review graph through `server/aiDraftNormalizer.js` |
+| Schema mapping | Map normalized elements to qualifications, shared units, outcomes, criteria, and rule entities |
 | Structure summarization | Derive discovered-qualification counts, shared-unit reuse summaries, and reviewer-facing structure metadata |
-| Draft persistence | Save extraction attempt as a draft reviewable result |
+| Draft persistence | Save extraction attempt as a draft reviewable result, or a pending review draft with `aiError` if the PDF artifact or AI path is unavailable |
 
 ### 5.5 Review Service
 

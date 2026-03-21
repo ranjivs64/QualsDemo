@@ -52,13 +52,13 @@ If information exists but cannot be reliably extracted, the agent MUST:
 ```json
 {
   "fileName": "string",
-  "documentText": "string",
-  "fallbackQualificationCode": "string | null",
-  "fallbackQualificationName": "string | null"
+  "sourceDocument": "attached PDF file"
 }
 ```
 
-Only `documentText` may be used as evidence.
+The attached PDF file is the only evidence source.
+
+`fileName` may be used for labeling and traceability, but MUST NOT override or supplement document evidence.
 
 ---
 
@@ -82,6 +82,7 @@ Only `documentText` may be used as evidence.
 ```json
 {
   "id": "string",
+  "qualificationCode": "string",
   "qualificationName": "string",
   "qualificationType": "string",
   "level": "string",

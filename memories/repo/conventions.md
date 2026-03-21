@@ -2,3 +2,4 @@
 - 2026-03-17: Pin GitHub Actions to commit SHAs in workflow files; use actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 instead of tag references.
 - 2026-03-19: The active runtime persistence module is `server/databaseStore.js`; it owns schema-version resets and supports multi-qualification specs, shared units, learning outcomes, and assessment criteria.
 - 2026-03-20: Runtime job responses are enriched in `server/jobStore.js` with derived structure summary counts and review readiness; the client should read those fields instead of inferring persistence state from hard-coded nodes.
+- 2026-03-21: The extraction pipeline now treats the uploaded PDF artifact as the authoritative AI input; `server/extractionService.js` may parse locally only for page-count/source-excerpt metadata, while qualification structure generation must come from `server/aiClient.js` via the Responses API file-input path.

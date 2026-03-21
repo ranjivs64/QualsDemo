@@ -38,7 +38,7 @@ set QUAL_AI_MODEL=gpt-5
 
 If you already have a full OpenAI-compatible Foundry base URL, you can use `FOUNDRY_BASE_URL` instead of `FOUNDRY_ENDPOINT`, but not both together.
 
-If no AI credentials are configured, the extraction service uses a deterministic fallback parser so the full workflow still runs locally.
+If no AI credentials are configured, the app still runs locally, but extraction jobs stay in review with an `aiError` until a valid AI provider is configured.
 
 ## Implemented Flows
 
@@ -59,7 +59,8 @@ If no AI credentials are configured, the extraction service uses a deterministic
 This is a local implementation slice with a local API server, SQLite-backed workflow state, and file-backed upload artifacts.
 
 - AI extraction supports either `OPENAI_API_KEY` or Azure AI Foundry via `QUAL_AI_PROVIDER=foundry`, `FOUNDRY_API_KEY`, `FOUNDRY_API_VERSION`, and either `FOUNDRY_ENDPOINT` or `FOUNDRY_BASE_URL`
-- If a Foundry provider is selected but misconfigured, the job falls back to deterministic extraction and records the configuration error in extraction metadata
+- Uploaded PDFs are sent directly to the configured model, and local PDF parsing is used only for page count and source excerpt metadata
+- If the AI path is unavailable or misconfigured, the job records the configuration error in extraction metadata instead of generating a heuristic qualification draft
 - `npm run ai:check` performs a lightweight provider connectivity check against the configured model and exits non-zero if configuration or connectivity fails
 - No authentication is wired yet
 

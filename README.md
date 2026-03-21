@@ -26,9 +26,9 @@ The solution has four main parts:
    - Schedules background extraction after upload
 
 3. Extraction pipeline in `server/`
-   - `extractionService.js` parses PDF text and builds draft structures
-   - `aiClient.js` routes extraction to either OpenAI or Azure AI Foundry
-   - Fallback extraction remains available when AI is not configured
+   - `extractionService.js` resolves the uploaded PDF artifact, derives lightweight metadata, and orchestrates extraction jobs
+   - `aiClient.js` sends the PDF directly to either OpenAI or Azure AI Foundry through the Responses API and validates the authoritative response
+   - `aiDraftNormalizer.js` maps the authoritative AI contract into the internal review graph used by the UI and persistence flow
 
 4. Persistence and artifacts
    - SQLite database at `QUAL_DB_PATH`
@@ -43,7 +43,7 @@ Current runtime characteristics:
 - HTTP layer: built-in `node:http`
 - Database: SQLite via `node:sqlite`
 - AI SDK: `openai` package with `OpenAI` and `AzureOpenAI`
-- PDF parsing: `pdf-parse`
+- PDF parsing: `pdf-parse` for page count and source excerpt metadata only
 - Telemetry: OpenTelemetry API and Node tracer provider
 
 Important implementation notes:
@@ -51,6 +51,8 @@ Important implementation notes:
 - The app currently uses local file storage for uploads.
 - The app currently uses SQLite for persistence.
 - Background extraction is scheduled in-process with `setTimeout(...)`.
+- Qualification extraction now requires a configured AI provider and an uploaded PDF artifact.
+- The uploaded PDF is sent directly to the model; the app no longer generates heuristic qualification drafts.
 - The app is suitable today for local use and internal single-instance staging.
 - The app is not yet approved for public production exposure.
 
@@ -113,7 +115,7 @@ QUAL_UPLOADS_DIR=server/uploads
 Notes:
 
 - Use either `FOUNDRY_ENDPOINT` or `FOUNDRY_BASE_URL`, not both.
-- If no AI provider is configured, the app falls back to deterministic extraction logic.
+- If no AI provider is configured, the app still runs, but extraction jobs remain in review with an `aiError` until AI configuration is fixed.
 
 ### 3. Validate AI connectivity
 

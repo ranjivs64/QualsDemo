@@ -20,83 +20,174 @@ const {
   listPersistedQualifications,
   getPersistedQualification
 } = require("../server/jobStore");
-const { processExtractionJob, createExtractionDraftFromText } = require("../server/extractionService");
+const { processExtractionJob } = require("../server/extractionService");
 const { closeDatabaseForTests } = require("../server/databaseStore");
 
-const sampleQualificationText = `
-Pearson BTEC Level 3 National Extended Diploma in Business
-Qualification number 603/0455/0
-Mandatory Units
-All mandatory units must be completed
-Unit 1: Exploring Business
-Reference H/507/8148
-GLH 90
-Credit value 10
-Assessment Internal
-Grade scheme Pass / Merit / Distinction
-Unit 3: Personal and Business Finance
-Reference T/507/5000
-GLH 120
-Credit value 15
-Assessment External
-Grade scheme Pass / Merit / Distinction
-Optional Units
-Choose at least 1 unit from this group
-Unit 8: Recruitment and Selection Process
-Reference F/507/8155
-GLH 60
-Credit value 10
-Assessment Internal
-Grade scheme Pass / Merit / Distinction
-`;
-
-function createReviewJob() {
-  const created = createUploadedJob("BTEC_Level3_Business_Spec.pdf");
-  const draft = createExtractionDraftFromText(created, {
-    text: sampleQualificationText,
-    pageCount: 12
-  });
-  const financeUnit = draft.qualification.children[0].children.find((child) => child.title === "Unit 3: Personal and Business Finance");
-  const optionalUnit = draft.qualification.children[1].children[0];
-
-  financeUnit.children.push({
-    id: "learning-outcome-1",
-    kind: "Learning Outcome",
-    title: "Learning Outcome 1",
-    summary: "Understand the purpose of personal finance",
-    confidence: 90,
+function createReviewDraftFixture() {
+  const financeUnit = {
+    id: "unit-3",
+    kind: "Unit",
+    title: "Unit 3: Personal and Business Finance",
+    summary: "Reference T/507/5000, GLH requires verification",
+    confidence: 68,
+    needsAttention: true,
+    guidance: "AI extracted a smudged GLH value. Verify before persistence.",
+    focus: { top: 31, height: 13, label: "Focus: Unit 3 GLH" },
     fields: {
-      description: "Understand the purpose of personal finance"
+      unitNumber: "Unit 3",
+      reference: "T/507/5000",
+      glh: "120?",
+      creditValue: "15",
+      assessmentType: "External",
+      gradeScheme: "Pass / Merit / Distinction",
+      gradingScheme: "Pass / Merit / Distinction"
     },
     children: [
       {
-        id: "criterion-pass-1",
-        kind: "Assessment Criterion",
-        title: "Pass Criterion 1",
-        summary: "Describe different financial products",
-        confidence: 89,
+        id: "learning-outcome-1",
+        kind: "Learning Outcome",
+        title: "Learning Outcome 1",
+        summary: "Understand the purpose of personal finance",
+        confidence: 90,
         fields: {
-          gradeLevel: "Pass",
-          description: "Describe different financial products available to consumers"
+          description: "Understand the purpose of personal finance"
         },
-        children: []
+        children: [
+          {
+            id: "criterion-pass-1",
+            kind: "Assessment Criterion",
+            title: "Pass Criterion 1",
+            summary: "Describe different financial products",
+            confidence: 89,
+            fields: {
+              gradeLevel: "Pass",
+              description: "Describe different financial products available to consumers"
+            },
+            children: []
+          }
+        ]
       }
     ]
-  });
+  };
 
-  draft.reviewReady = false;
-  draft.confidence = 82;
-  draft.documentFocus = { top: 31, height: 13, label: "Focus: Unit 3 GLH" };
-  financeUnit.id = "unit-3";
-  optionalUnit.id = "unit-8";
-  financeUnit.fields.glh = "120?";
-  financeUnit.summary = "Reference T/507/5000, GLH requires verification";
-  financeUnit.confidence = 68;
-  financeUnit.needsAttention = true;
-  financeUnit.guidance = "AI extracted a smudged GLH value. Verify before persistence.";
-  financeUnit.focus = { top: 31, height: 13, label: "Focus: Unit 3 GLH" };
+  return {
+    qualificationCode: "603/0455/0",
+    confidence: 82,
+    reviewReady: false,
+    pages: { current: 1, total: 12 },
+    documentFocus: { top: 31, height: 13, label: "Focus: Unit 3 GLH" },
+    sourceTextExcerpt: "Learners study the purpose and importance of personal and business finance.",
+    extractionMeta: {
+      provider: "openai",
+      model: "gpt-5.1-2026-01-15",
+      inputMode: "pdf-file"
+    },
+    qualification: {
+      id: "qualification-draft",
+      kind: "Qualification",
+      title: "Pearson BTEC Level 3 National Extended Diploma in Business",
+      summary: "Diploma, awarding body Pearson",
+      confidence: 91,
+      fields: {
+        qualificationName: "Pearson BTEC Level 3 National Extended Diploma in Business",
+        code: "603/0455/0",
+        type: "Diploma",
+        qualificationType: "Diploma",
+        level: "Level 3",
+        awardingBody: "Pearson",
+        sizeGlh: "Pending",
+        sizeCredits: "180",
+        gradingScheme: "Pass / Merit / Distinction",
+        totalQualificationTime: "Pending"
+      },
+      children: [
+        {
+          id: "group-1",
+          kind: "Unit Group",
+          title: "Mandatory Units",
+          summary: "All listed units must be completed",
+          confidence: 90,
+          fields: {
+            groupType: "Mandatory",
+            minimumUnits: "0",
+            selectionRule: "All listed units must be completed",
+            ruleSet: "All listed units must be completed"
+          },
+          children: [
+            {
+              id: "unit-1",
+              kind: "Unit",
+              title: "Unit 1: Exploring Business",
+              summary: "Reference H/507/8148, GLH 90, internally assessed",
+              confidence: 93,
+              fields: {
+                unitNumber: "Unit 1",
+                reference: "H/507/8148",
+                glh: "90",
+                creditValue: "10",
+                assessmentType: "Internal",
+                gradeScheme: "Pass / Merit / Distinction",
+                gradingScheme: "Pass / Merit / Distinction"
+              },
+              children: [
+                {
+                  id: "grade-scheme-unit-1",
+                  kind: "Grade Scheme",
+                  title: "Pass / Merit / Distinction",
+                  summary: "Minimum pass grade P",
+                  confidence: 91,
+                  fields: {
+                    schemeName: "Pass / Merit / Distinction",
+                    minimumPass: "P",
+                    grades: "P, M, D"
+                  },
+                  children: []
+                }
+              ]
+            },
+            financeUnit
+          ]
+        },
+        {
+          id: "group-2",
+          kind: "Unit Group",
+          title: "Optional Units",
+          summary: "Choose at least 1 unit",
+          confidence: 88,
+          fields: {
+            groupType: "Optional",
+            minimumUnits: "1",
+            selectionRule: "Choose at least 1 unit",
+            ruleSet: "Choose at least 1 unit"
+          },
+          children: [
+            {
+              id: "unit-8",
+              kind: "Unit",
+              title: "Unit 8: Recruitment and Selection Process",
+              summary: "Reference F/507/8155, GLH 60, internally assessed",
+              confidence: 90,
+              fields: {
+                unitNumber: "Unit 8",
+                reference: "F/507/8155",
+                glh: "60",
+                creditValue: "10",
+                assessmentType: "Internal",
+                gradeScheme: "Pass / Merit / Distinction",
+                gradingScheme: "Pass / Merit / Distinction"
+              },
+              children: []
+            }
+          ]
+        }
+      ]
+    }
+  };
+}
 
-  return hydrateJobForReview(created.id, draft);
+function createReviewJob() {
+  const created = createUploadedJob("BTEC_Level3_Business_Spec.pdf");
+  return hydrateJobForReview(created.id, createReviewDraftFixture());
 }
 
 test.beforeEach(() => {
@@ -137,33 +228,15 @@ test("hydrateJobForReview moves a processing job into review with qualification 
   assert.equal(job.reviewReady, true);
 });
 
-test("processExtractionJob uses fallback extraction when AI is not configured", async () => {
-  delete process.env.OPENAI_API_KEY;
+test("processExtractionJob does not create heuristic metadata without an uploaded PDF artifact", async () => {
   const created = createUploadedJob("BTEC_Level3_Business_Spec.pdf");
   const hydrated = await processExtractionJob(created.id);
   assert.equal(hydrated.status, "review");
-  assert.equal(hydrated.extractionMeta.provider, "fallback");
-  assert.equal(hydrated.qualification.kind, "Qualification");
-});
-
-test("createExtractionDraftFromText builds groups, units, grade schemes, and rule hints from text", () => {
-  const job = createUploadedJob("Business_Qualification.pdf");
-  const draft = createExtractionDraftFromText(job, {
-    text: sampleQualificationText,
-    pageCount: 12
-  });
-
-  assert.equal(draft.qualification.kind, "Qualification");
-  assert.equal(draft.qualification.children.length, 2);
-  assert.equal(draft.qualification.children[0].fields.groupType, "Mandatory");
-  assert.equal(draft.qualification.children[1].fields.groupType, "Optional");
-  assert.equal(draft.qualification.children[1].fields.minimumUnits, "1");
-  assert.equal(draft.qualification.children[0].children.length, 2);
-  assert.equal(draft.qualification.children[1].children.length, 1);
-  assert.equal(draft.qualification.children[0].children[0].children[0].kind, "Grade Scheme");
-  assert.equal(draft.qualification.children[0].children[0].children[0].fields.grades, "P, M, D");
-  assert.equal(draft.reviewReady, true);
-  assert.equal(draft.extractionMeta.parser, "text-heuristics");
+  assert.equal(hydrated.extractionMeta.provider, "openai");
+  assert.equal(hydrated.extractionMeta.inputMode, "pdf-file");
+  assert.equal(hydrated.extractionMeta.aiError, "An uploaded PDF artifact is required for AI extraction.");
+  assert.equal(hydrated.qualifications.length, 0);
+  assert.equal(hydrated.qualification, null);
 });
 
 test("updateNodeField updates a node field value", () => {

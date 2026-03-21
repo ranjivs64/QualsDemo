@@ -59,7 +59,7 @@ inputs:
 
 The product must extract qualification structures from uploaded PDFs, display the extracted structure in a web application, support reviewer edits and reprocessing, and persist reviewer-confirmed structures through a newly created API and backing database. The current product direction requires the review experience to summarize how many qualifications were discovered in each specification, show the structure for every qualification found, support shared units reused across qualifications, and make hierarchy groups expandable and collapsible for navigation. The target schema is defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md) and expanded in [PRD-1.md](../prd/PRD-1.md).
 
-An additional implementation constraint now exists: the active extractor prompt defines an authoritative external AI contract that does not match the application's legacy internal review graph. The architecture therefore needs an explicit compatibility boundary so the external AI contract can evolve without forcing same-day changes to review, persistence, and UI consumers.
+An additional implementation constraint now exists: the active extractor prompt defines an authoritative external AI contract that does not match the application's legacy internal review graph. The runtime now sends the uploaded PDF artifact directly to the model through a structured-output Responses API path, and local parsing is retained only for page-count and source-excerpt metadata. The architecture therefore needs an explicit compatibility boundary so the external AI contract can evolve without forcing same-day changes to review, persistence, and UI consumers.
 
 ### Requirements
 - Web application delivery surface.
@@ -142,13 +142,15 @@ We will build a web-based, asynchronous, human-in-the-loop extraction platform c
 - and an auditable approval and submission workflow.
 
 ### Key architectural choices
-- Use managed layout-aware document AI behind a provider adapter rather than a direct hard-coded vendor dependency.
+- Use a managed PDF-capable AI model behind a provider adapter rather than a direct hard-coded vendor dependency.
 - Use a two-contract boundary: authoritative AI output externally, deterministic normalization into the current internal review graph internally.
+- Send the uploaded PDF artifact directly to the model and treat it as the only extraction evidence source.
 - Use asynchronous extraction jobs instead of synchronous request-response processing for the full workflow.
 - Use a relational database as the system of record because qualifications, units, grade schemes, groups, and rulesets are highly relational.
 - Use a dedicated persistence API boundary between review workflow and database writes.
 - Keep confidence informational only and require explicit reviewer approval.
 - Support both direct edit and guided reprocessing before approval.
+- Do not generate heuristic qualification drafts in the active runtime path.
 
 ### Reference architecture
 
@@ -298,7 +300,7 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 
 ### Key milestones
 - Phase 1: Persistence schema and API contract complete.
-- Phase 2: Extraction orchestration and schema mapping complete.
+- Phase 2: Extraction orchestration, direct-PDF AI invocation, authoritative-schema validation, and normalization complete.
 - Phase 3: Review web application and approval flow complete.
 - Phase 4: Pilot evaluation, provider tuning, and operational hardening complete.
 
@@ -310,33 +312,36 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 
 | Option | Capability fit | Operational maturity | Lock-in risk | Selected |
 |-------|----------------|----------------------|-------------|----------|
-| Managed layout-aware document AI through adapter | High | Medium to High | Medium | PASS |
+| Managed PDF-capable AI inference through adapter | High | Medium to High | Medium | PASS |
 | Open-source self-hosted extraction stack | Medium | Low to Medium | Low | FAIL |
 | Plain OCR and rules only | Low | High | Low | FAIL |
 
 ### Agent architecture pattern
-- Single extraction pipeline with deterministic post-processing
+- Single extraction pipeline with direct PDF model input and deterministic post-processing
 - Human-in-the-loop review and approval
 - Hybrid architecture with AI-assisted extraction, an authoritative external AI contract, and deterministic normalization into the internal review graph
+- Local PDF parsing used only for metadata enrichment, not qualification-structure generation
 
 ### Inference pipeline
 
 ```mermaid
 graph LR
  A[Uploaded PDF] --> B[Secure validation and storage]
- B --> C[Layout-aware extraction]
- C --> D[Schema mapping]
- D --> E[Structure summarization]
- E --> F[Reviewer workspace]
- F --> G[Approve]
- F --> H[Edit]
- F --> I[Reprocess]
- G --> J[Persistence API]
+ B --> C[Artifact resolution and metadata analysis]
+ C --> D[Responses API call with attached PDF and prompt]
+ D --> E[Authoritative schema validation]
+ E --> F[Deterministic normalization to review graph]
+ F --> G[Structure summarization]
+ G --> H[Reviewer workspace]
+ H --> I[Approve]
+ H --> J[Edit]
+ H --> K[Reprocess]
+ I --> L[Persistence API]
 
- style C fill:#F3E5F5,stroke:#6A1B9A
- style D fill:#E8F5E9,stroke:#2E7D32
- style F fill:#E3F2FD,stroke:#1565C0
- style J fill:#FFF3E0,stroke:#E65100
+ style D fill:#F3E5F5,stroke:#6A1B9A
+ style F fill:#E8F5E9,stroke:#2E7D32
+ style H fill:#E3F2FD,stroke:#1565C0
+ style L fill:#FFF3E0,stroke:#E65100
 ```
 
 ### Evaluation strategy
@@ -352,8 +357,9 @@ graph LR
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Layout model misses nested rule logic | High | Structure-first review, collapsible hierarchy navigation, and reviewer confirmation |
+| PDF-capable model misses nested rule logic | High | Structure-first review, collapsible hierarchy navigation, and reviewer confirmation |
 | Provider output drift | Medium | Version pinning, evaluation corpus, release gate |
+| Uploaded artifact missing or unreadable | Medium | Fail into review with explicit `aiError`, retain job state, and require a valid PDF artifact before reprocessing |
 | Confidence misinterpreted as correctness | Medium | Advisory-only confidence labels and approval gate |
 | Provider outage | Medium | Retries, job state retention, adapter boundary for substitution |
 

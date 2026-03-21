@@ -194,7 +194,7 @@
     }
 
     elements.aiStatusBanner.className = "status-banner status-banner-warning";
-    elements.aiStatusText.textContent = `${source} is not ready. ${aiStatus.issues.join(" ")} Fallback extraction remains available.`;
+    elements.aiStatusText.textContent = `${source} is not ready. ${aiStatus.issues.join(" ")} AI extraction requires a configured provider and an uploaded PDF artifact.`;
   }
 
   function renderDashboardJobs() {

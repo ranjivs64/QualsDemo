@@ -43,39 +43,28 @@ function extractQualificationCode(text) {
   return null;
 }
 
-function getFallbackQualification(fallbackDraft, index) {
-  if (!fallbackDraft) {
-    return null;
-  }
-  if (Array.isArray(fallbackDraft.qualifications) && fallbackDraft.qualifications[index]) {
-    return fallbackDraft.qualifications[index];
-  }
-  if (index === 0 && fallbackDraft.qualification) {
-    return fallbackDraft.qualification;
-  }
-  return null;
+function getNormalizationContext(context) {
+  return {
+    confidence: Number.isFinite(context && context.confidence) ? context.confidence : 80,
+    pages: context && context.pages ? context.pages : { current: 1, total: 1 },
+    documentFocus: context && context.documentFocus
+      ? context.documentFocus
+      : { top: 28, height: 12, label: "Focus pending" },
+    sourceTextExcerpt: typeof (context && context.sourceTextExcerpt) === "string"
+      ? context.sourceTextExcerpt
+      : null
+  };
 }
 
-function resolveQualificationCode(rawQualification, fallbackDraft, index) {
-  const directMatch = extractQualificationCode(rawQualification.id)
-    || extractQualificationCode(rawQualification.qualificationName);
-  if (directMatch) {
-    return directMatch;
+function resolveQualificationCode(rawQualification) {
+  const explicitCode = nullableString(rawQualification && rawQualification.qualificationCode);
+  if (explicitCode) {
+    return explicitCode;
   }
 
-  const fallbackQualification = getFallbackQualification(fallbackDraft, index);
-  const fallbackCode = fallbackQualification && fallbackQualification.fields
-    ? fallbackQualification.fields.code
-    : null;
-  if (fallbackCode && fallbackCode !== "Pending") {
-    return fallbackCode;
-  }
-
-  if (index === 0 && fallbackDraft && fallbackDraft.qualificationCode) {
-    return fallbackDraft.qualificationCode;
-  }
-
-  return "Pending";
+  const directMatch = extractQualificationCode(rawQualification && rawQualification.id)
+    || extractQualificationCode(rawQualification && rawQualification.qualificationName);
+  return directMatch || "Pending";
 }
 
 function buildRulesSummary(rules) {
@@ -182,31 +171,18 @@ function createUnitGroupNode(group, qualification, index) {
   };
 }
 
-function createQualificationNode(rawQualification, fallbackDraft, index) {
-  const fallbackQualification = getFallbackQualification(fallbackDraft, index);
-  const code = resolveQualificationCode(rawQualification, fallbackDraft, index);
+function createQualificationNode(rawQualification, index) {
+  const code = resolveQualificationCode(rawQualification);
   const unitGroups = Array.isArray(rawQualification && rawQualification.unitGroups)
     ? rawQualification.unitGroups
     : [];
   const rules = rawQualification && rawQualification.rulesOfCombination
     ? rawQualification.rulesOfCombination
     : { totalCredits: null, mandatoryCredits: null, optionalCredits: null, constraints: [] };
-  const qualificationName = stringOrPending(
-    rawQualification && rawQualification.qualificationName,
-    fallbackQualification ? fallbackQualification.title : "Qualification"
-  );
-  const qualificationType = stringOrPending(
-    rawQualification && rawQualification.qualificationType,
-    fallbackQualification && fallbackQualification.fields ? fallbackQualification.fields.qualificationType : "Qualification"
-  );
-  const awardingBody = stringOrPending(
-    rawQualification && rawQualification.awardingBody,
-    fallbackQualification && fallbackQualification.fields ? fallbackQualification.fields.awardingBody : "Pending"
-  );
-  const level = stringOrPending(
-    rawQualification && rawQualification.level,
-    fallbackQualification && fallbackQualification.fields ? fallbackQualification.fields.level : "Pending"
-  );
+  const qualificationName = stringOrPending(rawQualification && rawQualification.qualificationName, "Qualification");
+  const qualificationType = stringOrPending(rawQualification && rawQualification.qualificationType, "Qualification");
+  const awardingBody = stringOrPending(rawQualification && rawQualification.awardingBody, "Pending");
+  const level = stringOrPending(rawQualification && rawQualification.level, "Pending");
   const derivedFrom = nullableString(rawQualification && rawQualification.derivedFrom);
   const ruleSummary = buildRulesSummary(rules);
 
@@ -217,7 +193,7 @@ function createQualificationNode(rawQualification, fallbackDraft, index) {
     summary: derivedFrom
       ? `${qualificationType}, derived from ${derivedFrom}`
       : `${qualificationType}, awarding body ${awardingBody}`,
-    confidence: clampConfidence(fallbackDraft && fallbackDraft.confidence, 85),
+    confidence: 85,
     fields: {
       qualificationName,
       code,
@@ -225,12 +201,10 @@ function createQualificationNode(rawQualification, fallbackDraft, index) {
       qualificationType,
       level,
       awardingBody,
-      sizeGlh: fallbackQualification && fallbackQualification.fields ? fallbackQualification.fields.sizeGlh || "Pending" : "Pending",
+      sizeGlh: "Pending",
       sizeCredits: numberStringOrPending(rules.totalCredits),
       gradingScheme: stringOrPending(rawQualification && rawQualification.gradingScheme),
-      totalQualificationTime: fallbackQualification && fallbackQualification.fields
-        ? fallbackQualification.fields.totalQualificationTime || "Pending"
-        : "Pending",
+      totalQualificationTime: "Pending",
       derivedFrom: derivedFrom || "",
       mandatoryCredits: numberStringOrPending(rules.mandatoryCredits),
       optionalCredits: numberStringOrPending(rules.optionalCredits),
@@ -253,37 +227,36 @@ function findFirstAttentionNode(qualifications) {
   return null;
 }
 
-function normalizeAuthoritativeAiPayload(payload, fallbackDraft) {
+function normalizeAuthoritativeAiPayload(payload, context) {
+  const resolvedContext = getNormalizationContext(context);
   const envelope = payload && payload.Qualifications ? payload.Qualifications : null;
   const rawQualifications = Array.isArray(envelope && envelope.qualifications)
     ? envelope.qualifications
     : [];
-  const normalizedQualifications = rawQualifications.map((qualification, index) => createQualificationNode(qualification, fallbackDraft, index));
+  const normalizedQualifications = rawQualifications.map((qualification, index) => createQualificationNode(qualification, index));
   const firstAttentionNode = findFirstAttentionNode(normalizedQualifications);
-  const fallbackFocus = fallbackDraft && fallbackDraft.documentFocus
-    ? fallbackDraft.documentFocus
-    : { top: 28, height: 12, label: "Focus pending" };
-  const normalizedConfidence = clampConfidence(envelope && envelope.confidence, fallbackDraft && fallbackDraft.confidence ? fallbackDraft.confidence : 80);
+  const normalizedConfidence = clampConfidence(envelope && envelope.confidence, resolvedContext.confidence);
   const loweredConfidence = envelope && envelope.needsAttention
     ? Math.min(normalizedConfidence, 79)
     : normalizedConfidence;
 
   return {
     qualificationCode: normalizedQualifications[0] && normalizedQualifications[0].fields
-      ? normalizedQualifications[0].fields.code || (fallbackDraft ? fallbackDraft.qualificationCode : "Pending")
-      : fallbackDraft ? fallbackDraft.qualificationCode : "Pending",
+      ? normalizedQualifications[0].fields.code || "Pending"
+      : "Pending",
     confidence: loweredConfidence,
     reviewReady: normalizedQualifications.length > 0,
-    pages: fallbackDraft && fallbackDraft.pages ? fallbackDraft.pages : { current: 1, total: 1 },
+    pages: resolvedContext.pages,
     documentFocus: firstAttentionNode
       ? {
-        top: fallbackFocus.top,
-        height: fallbackFocus.height,
+        top: resolvedContext.documentFocus.top,
+        height: resolvedContext.documentFocus.height,
         label: `Focus: ${firstAttentionNode.title}`
       }
-      : fallbackFocus,
+      : resolvedContext.documentFocus,
     qualification: normalizedQualifications[0] || null,
     qualifications: normalizedQualifications,
+    sourceTextExcerpt: resolvedContext.sourceTextExcerpt,
     extractionMeta: {
       contractVersion: AUTHORITATIVE_CONTRACT_VERSION,
       authoritativeQualificationCount: rawQualifications.length,

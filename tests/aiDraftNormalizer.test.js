@@ -4,31 +4,11 @@ const assert = require("node:assert/strict");
 const { normalizeAuthoritativeAiPayload } = require("../server/aiDraftNormalizer");
 
 test("normalizeAuthoritativeAiPayload maps shared units and learning objectives into the internal graph", () => {
-  const fallbackDraft = {
-    qualificationCode: "603/0455/0",
+  const extractionContext = {
     confidence: 78,
-    reviewReady: false,
     pages: { current: 1, total: 92 },
     documentFocus: { top: 28, height: 12, label: "Focus pending" },
-    qualification: {
-      id: "qualification-draft",
-      kind: "Qualification",
-      title: "Fallback Qualification",
-      confidence: 78,
-      fields: {
-        qualificationName: "Fallback Qualification",
-        code: "603/0455/0",
-        qualificationType: "Diploma",
-        level: "Level 3",
-        awardingBody: "Pearson",
-        sizeGlh: "Pending",
-        sizeCredits: "Pending",
-        gradingScheme: "Pending",
-        totalQualificationTime: "Pending"
-      },
-      children: []
-    },
-    qualifications: []
+    sourceTextExcerpt: "Qualification specification excerpt"
   };
 
   const payload = {
@@ -39,6 +19,7 @@ test("normalizeAuthoritativeAiPayload maps shared units and learning objectives 
       qualifications: [
         {
           id: "extended-diploma",
+          qualificationCode: "603/0455/0",
           qualificationName: "Pearson BTEC Level 3 National Extended Diploma in Business",
           qualificationType: "Diploma",
           level: "Level 3",
@@ -81,6 +62,7 @@ test("normalizeAuthoritativeAiPayload maps shared units and learning objectives 
         },
         {
           id: "foundation-diploma",
+          qualificationCode: "603/0454/9",
           qualificationName: "Pearson BTEC Level 3 National Foundation Diploma in Business",
           qualificationType: "Diploma",
           level: "Level 3",
@@ -125,7 +107,7 @@ test("normalizeAuthoritativeAiPayload maps shared units and learning objectives 
     }
   };
 
-  const normalized = normalizeAuthoritativeAiPayload(payload, fallbackDraft);
+  const normalized = normalizeAuthoritativeAiPayload(payload, extractionContext);
 
   assert.equal(normalized.qualifications.length, 2);
   assert.equal(normalized.qualification.fields.code, "603/0455/0");
@@ -136,4 +118,5 @@ test("normalizeAuthoritativeAiPayload maps shared units and learning objectives 
   );
   assert.equal(normalized.qualifications[0].children[0].children[0].children[0].kind, "Learning Outcome");
   assert.equal(normalized.extractionMeta.authoritativeQualificationCount, 2);
+  assert.equal(normalized.sourceTextExcerpt, "Qualification specification excerpt");
 });

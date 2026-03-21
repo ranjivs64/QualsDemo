@@ -42,6 +42,7 @@
       "additionalProperties": false,
       "required": [
         "id",
+        "qualificationCode",
         "qualificationName",
         "qualificationType",
         "level",
@@ -53,6 +54,9 @@
       ],
       "properties": {
         "id": {
+          "type": "string"
+        },
+        "qualificationCode": {
           "type": "string"
         },
         "qualificationName": {
