@@ -44,7 +44,6 @@
     qualificationTabs: document.getElementById("qualificationTabs"),
     hierarchyTree: document.getElementById("hierarchyTree"),
     inspectorContent: document.getElementById("inspectorContent"),
-    approvalPanel: document.getElementById("approvalPanel"),
     approveButton: document.getElementById("approveButton"),
     reprocessButton: document.getElementById("reprocessButton"),
     toastStack: document.getElementById("toastStack"),
@@ -285,7 +284,6 @@
       elements.hierarchyTree.innerHTML = "<div class=\"empty-state\"><h4>No hierarchy available</h4><p>The structure tree will populate after extraction finishes.</p></div>";
       elements.inspectorContent.className = "inspector-content empty-state";
       elements.inspectorContent.innerHTML = "<h4>No node selected</h4><p>Select a qualification, unit, outcome, or criterion to inspect extracted details.</p>";
-      elements.approvalPanel.innerHTML = "";
       elements.approveButton.disabled = true;
       elements.reprocessButton.disabled = true;
       return;
@@ -311,7 +309,6 @@
     renderQualificationTabs(job);
     renderTree(job, selectedQualification);
     renderInspector(job, selectedQualification, selectedNode);
-    renderApprovalPanel(job);
 
     elements.approveButton.disabled = job.status !== "review" || !job.reviewReady || state.isBusy;
     elements.reprocessButton.disabled = job.status === "processing" || state.isBusy;
@@ -384,7 +381,14 @@
         </div>
       </div>
       ${aiError ? `<div class="empty-state"><h4>AI extraction failed</h4><p>${escapeHtml(aiError)}</p></div>` : ""}
+      ${job.artifact ? `<div class="spec-pdf-action"><button class="secondary-button" id="specPdfButton" type="button">Open uploaded PDF</button></div>` : ""}
     `;
+    const specPdfButton = elements.validationRail.querySelector("#specPdfButton");
+    if (specPdfButton) {
+      specPdfButton.addEventListener("click", () => {
+        window.open(`${API_BASE}/jobs/${job.id}/artifact`, "_blank", "noopener,noreferrer");
+      });
+    }
   }
 
   function renderQualificationTabs(job) {
@@ -439,7 +443,9 @@
     row.className = "tree-row";
 
     const hasChildren = Boolean(node.children && node.children.length);
-    const isCollapsed = Boolean(state.collapsedNodeIds[node.id]);
+    const isCollapsed = node.id in state.collapsedNodeIds
+      ? Boolean(state.collapsedNodeIds[node.id])
+      : true;
 
     if (hasChildren) {
       const toggle = document.createElement("button");
@@ -450,7 +456,7 @@
       toggle.innerHTML = `<span class="tree-toggle-icon">${isCollapsed ? "+" : "-"}</span>`;
       toggle.addEventListener("click", (event) => {
         event.stopPropagation();
-        state.collapsedNodeIds[node.id] = !state.collapsedNodeIds[node.id];
+        state.collapsedNodeIds[node.id] = !isCollapsed;
         renderReview();
       });
       row.appendChild(toggle);
@@ -503,12 +509,11 @@
   function renderInspector(job, qualification, node) {
     if (!node) {
       elements.inspectorContent.className = "inspector-content empty-state";
-      elements.inspectorContent.innerHTML = "<h4>No node selected</h4><p>Select a hierarchy item to inspect extracted fields and available actions.</p>";
+      elements.inspectorContent.innerHTML = "<h4>No node selected</h4><p>Select a hierarchy item to inspect and edit extracted attributes.</p>";
       return;
     }
 
     const sharedInfo = getSharedUnitInfo(job, node.id);
-    const childPreview = (node.children || []).map((child) => `<li>${escapeHtml(child.kind)}: ${escapeHtml(child.title)}</li>`).join("");
     const fields = Object.entries(node.fields || {});
 
     elements.inspectorContent.className = "inspector-content";
@@ -528,41 +533,24 @@
           <div><span>Qualification</span><strong>${escapeHtml(qualification ? qualification.title : "Unknown")}</strong></div>
           <div><span>Children</span><strong>${node.children ? node.children.length : 0}</strong></div>
           <div><span>Shared usage</span><strong>${sharedInfo ? `${sharedInfo.count} qualifications` : "Single qualification"}</strong></div>
+          <div><span>Node ID</span><strong>${escapeHtml(node.id)}</strong></div>
         </div>
       </div>
       <div class="inspector-block">
+        <p class="panel-kicker">Editable attributes</p>
         ${fields.length ? `
           <div class="inspector-grid">
             ${fields.map(([field, value]) => `
               <label class="inspector-field">
                 <span>${escapeHtml(startCase(field))}</span>
-                <input data-field="${escapeAttribute(field)}" value="${escapeAttribute(value)}">
+                <input data-field="${escapeAttribute(field)}" value="${escapeAttribute(value == null ? "" : value)}">
               </label>
             `).join("")}
           </div>
         ` : "<p class=\"muted\">This node does not expose editable fields.</p>"}
       </div>
-      ${sharedInfo ? `
-        <div class="inspector-block">
-          <p class="panel-kicker">Shared unit context</p>
-          <h4>Linked qualifications</h4>
-          <ul class="linked-list">
-            ${sharedInfo.qualificationTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}
-          </ul>
-        </div>
-      ` : ""}
-      ${(node.children || []).length ? `
-        <div class="inspector-block">
-          <p class="panel-kicker">Nested entities</p>
-          <ul class="linked-list">${childPreview}</ul>
-        </div>
-      ` : ""}
       <div class="inspector-block">
-        <p class="inspector-note">${escapeHtml(node.guidance || "Review the extracted fields and source context before persisting.")}</p>
-        <div class="inspector-actions">
-          <button class="secondary-button" id="focusNodeButton" type="button">Highlight source</button>
-          ${job.artifact ? "<button class=\"secondary-button\" id=\"openArtifactButton\" type=\"button\">Open uploaded PDF</button>" : ""}
-        </div>
+        <p class="inspector-note">${escapeHtml(node.guidance || "Update fields as needed. Changes are saved immediately.")}</p>
       </div>
     `;
 
@@ -577,55 +565,6 @@
         }
       });
     });
-
-    document.getElementById("focusNodeButton").addEventListener("click", () => {
-      renderDocumentPanel(job, node);
-      pushToast("Source linked", `${node.title} is now focused in the document panel.`);
-    });
-
-    const artifactButton = document.getElementById("openArtifactButton");
-    if (artifactButton) {
-      artifactButton.addEventListener("click", () => {
-        window.open(`${API_BASE}/jobs/${job.id}/artifact`, "_blank", "noopener,noreferrer");
-      });
-    }
-  }
-
-  function renderApprovalPanel(job) {
-    const summary = job.validationSummary || { counts: getCounts(job) };
-    const aiError = getAiExtractionError(job);
-    const approvalHeadline = aiError
-      ? "AI extraction failed"
-      : job.reviewReady ? "Ready to persist" : "Waiting for extraction";
-    const approvalCopy = aiError
-      ? "The uploaded PDF reached the review workspace without any extracted qualifications. Resolve the AI issue and reprocess the job."
-      : job.reviewReady
-        ? "Review the discovered qualification structures, expand the groups you need, and persist when ready."
-        : "Persistence becomes available after extraction finishes and at least one qualification structure is available.";
-
-    elements.approvalPanel.innerHTML = `
-      <div class="approval-card">
-        <div class="approval-header">
-          <div>
-            <p class="panel-kicker">Approval gate</p>
-            <h4>${escapeHtml(approvalHeadline)}</h4>
-          </div>
-          ${createBadgeMarkup(getReviewStateLabel(job), getReviewStateVariant(job))}
-        </div>
-        <p class="muted">${escapeHtml(approvalCopy)}</p>
-        ${aiError ? `<p class="muted">Reason: ${escapeHtml(aiError)}</p>` : ""}
-        <div class="approval-metrics">
-          <div><span>Qualifications</span><strong>${summary.counts.qualifications}</strong></div>
-          <div><span>Shared units</span><strong>${summary.counts.sharedUnits}</strong></div>
-          <div><span>Units</span><strong>${summary.counts.units}</strong></div>
-          <div><span>Criteria</span><strong>${summary.counts.assessmentCriteria}</strong></div>
-        </div>
-        <div class="inspector-actions">
-          <span class="badge badge-neutral">${summary.counts.learningOutcomes} learning outcome${summary.counts.learningOutcomes === 1 ? "" : "s"}</span>
-          <span class="badge badge-neutral">${summary.counts.assessmentCriteria} assessment criteria</span>
-        </div>
-      </div>
-    `;
   }
 
   function setReviewBadge(job) {

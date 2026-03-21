@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QualExtract AI</title>
+  <title>UK Qualification Extraction AI</title>
   <link rel="stylesheet" href="./assets/styles.css">
 </head>
 <body>
@@ -11,10 +11,12 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-lockup">
-        <div class="brand-mark" aria-hidden="true">Q</div>
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 54 54" xmlns="http://www.w3.org/2000/svg" focusable="false"><rect width="54" height="54" rx="18" fill="#003057"/><text x="27" y="37" text-anchor="middle" font-family="'Trebuchet MS',Arial,sans-serif" font-weight="900" font-size="25" fill="#fff" letter-spacing="-0.5">P</text></svg>
+        </div>
         <div>
-          <p class="eyebrow">Qualification Structure Extraction</p>
-          <h1 class="brand-title">QualExtract AI</h1>
+          <p class="eyebrow">Pearson Qualification AI</p>
+          <h1 class="brand-title">UK Qualification Extraction AI</h1>
         </div>
       </div>
       <nav class="topnav" aria-label="Primary">
@@ -32,7 +34,6 @@
       <section class="view is-active" id="view-dashboard" aria-labelledby="dashboard-title">
         <div class="hero-panel">
           <div class="pipeline-flow">
-            <h2 id="dashboard-title" class="pipeline-title">QualExtract <span class="pipeline-title-ai">AI</span></h2>
             <div class="pipeline-steps" aria-label="Workflow stages">
               <span class="pipeline-step">Upload</span>
               <span class="pipeline-arrow" aria-hidden="true">&#8594;</span>
@@ -101,7 +102,7 @@
         <div class="review-header panel">
           <div>
             <p class="panel-kicker">Human-in-the-loop review</p>
-            <h2 id="review-title">Qualification review workspace</h2>
+            <p class="review-header-title" id="review-title">Qualification Review</p>
             <p class="muted" id="reviewSubtitle">Select a job from the queue to inspect the discovered qualification structures.</p>
           </div>
           <div class="review-actions">
@@ -135,19 +136,19 @@
             <div class="hierarchy-tree" id="hierarchyTree"></div>
           </section>
 
-          <aside class="panel inspector-panel" aria-labelledby="inspector-title">
-            <div class="panel-header compact">
-              <div>
-                <p class="panel-kicker">Selected Node</p>
-                <h3 id="inspector-title">Detail and persistence</h3>
+            <aside class="panel inspector-panel" aria-labelledby="inspector-title">
+              <div class="panel-header compact">
+                <div>
+                  <p class="panel-kicker">Selected Node</p>
+                  <h3 id="inspector-title">Editable attributes</h3>
+                </div>
               </div>
-            </div>
-            <div id="inspectorContent" class="inspector-content empty-state">
-              <h4>No node selected</h4>
-              <p>Select a qualification, group, unit, outcome, or criterion to inspect extracted fields and reviewer actions.</p>
-            </div>
-            <div id="approvalPanel" class="approval-panel"></div>
-          </aside>
+              <div id="inspectorContent" class="inspector-content empty-state">
+                <h4>No node selected</h4>
+                <p>Select a qualification, group, unit, outcome, or criterion to edit its attributes.</p>
+              </div>
+            </aside>
+
         </div>
       </section>
 
