@@ -217,11 +217,35 @@ jobs:
 
       - name: Deploy infrastructure
         run: |
-          az deployment group create \
-            --name "deploy-${{ github.run_id }}" \
-            --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
-            --template-file infra/main.bicep \
-            --parameters "${{ needs.prepare.outputs.parameter_file }}"
+          deployment_name="deploy-${{ github.run_id }}"
+          max_attempts=3
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            set +e
+            deploy_output=$(az deployment group create \
+              --name "$deployment_name" \
+              --resource-group "${{ env.DEPLOY_RESOURCE_GROUP }}" \
+              --template-file infra/main.bicep \
+              --parameters "${{ needs.prepare.outputs.parameter_file }}" 2>&1)
+            exit_code=$?
+            set -e
+
+            printf '%s\n' "$deploy_output"
+
+            if [ "$exit_code" -eq 0 ]; then
+              exit 0
+            fi
+
+            if printf '%s' "$deploy_output" | grep -q 'RequestConflict' && printf '%s' "$deploy_output" | grep -q 'provisioning state is not terminal'; then
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "Azure resource provisioning is still in progress. Waiting before retrying infrastructure deployment (attempt $attempt of $max_attempts)." >&2
+                sleep 30
+                continue
+              fi
+            fi
+
+            exit "$exit_code"
+          done
 
       - name: Capture infrastructure outputs
         id: capture

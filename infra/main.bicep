@@ -134,7 +134,7 @@ resource foundryApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
   name: foundryApiKeySecretName
   properties: {
-    value: listKeys(openAiAccount.id, openAiAccount.apiVersion).key1
+    value: openAiAccount.listKeys().key1
   }
 }
 
