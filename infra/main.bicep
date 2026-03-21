@@ -26,10 +26,10 @@ param appServiceSkuName string = 'B1'
 param foundryApiVersion string = '2024-10-21'
 
 @description('Azure OpenAI model or deployment name used by the application.')
-param foundryModel string = 'gpt-4o-mini'
+param foundryModel string = 'gpt-5'
 
 @description('Azure OpenAI model version to deploy.')
-param foundryModelVersion string = '2024-07-18'
+param foundryModelVersion string = '2025-08-07'
 
 @description('Azure OpenAI deployment SKU name.')
 param aiDeploymentSkuName string = 'GlobalStandard'

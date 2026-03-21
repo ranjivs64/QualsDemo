@@ -95,7 +95,7 @@ QUAL_AI_PROVIDER=foundry
 FOUNDRY_API_KEY=<your-foundry-key>
 FOUNDRY_ENDPOINT=https://<your-resource-name>.openai.azure.com
 FOUNDRY_API_VERSION=2024-10-21
-QUAL_AI_MODEL=gpt-4o-mini
+QUAL_AI_MODEL=gpt-5
 QUAL_DB_PATH=server/data/qualextract.sqlite
 QUAL_UPLOADS_DIR=server/uploads
 ```
@@ -262,7 +262,7 @@ The expected `AZURE_CREDENTIALS` JSON shape is:
 
 When `AZURE_CREDENTIALS` is present, the workflow can also use its `subscriptionId` field as the default deployment subscription if you do not pass `subscription_id` and have not set `AZURE_SUBSCRIPTION_ID` separately.
 
-The infrastructure template defaults Azure OpenAI deployments to `GlobalStandard`, which is the supported deployment type for the current `gpt-4o-mini` configuration in the selected region.
+The infrastructure template defaults Azure OpenAI deployments to `GlobalStandard`, which is the supported deployment type for the current `gpt-5` configuration in the selected region.
 
 The workflow prefers runtime inputs when provided, otherwise it falls back to repository variables or repository secrets for subscription and resource group. The subscription ID inside `AZURE_CREDENTIALS` remains informational for this repo's current flow.
 
