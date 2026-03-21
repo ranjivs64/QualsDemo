@@ -208,6 +208,7 @@
 
     jobs.forEach((job) => {
       const counts = getCounts(job);
+      const aiError = getAiExtractionError(job);
       const actionLabel = job.status === "persisted" ? "View" : job.status === "processing" ? "Track" : "Review";
       const card = document.createElement("article");
       card.className = "job-card";
@@ -218,6 +219,7 @@
             <h4 class="job-name">${escapeHtml(job.fileName)}</h4>
             <p class="job-meta">${escapeHtml(getStatusLabel(job.status))} | ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} discovered | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"}</p>
             <p class="job-meta">Confidence ${job.confidence || 0}% | Attempt ${job.attempts} | Source ${escapeHtml(describeExtractionSource(job))} | Updated ${escapeHtml(formatDate(job.updatedAt))}</p>
+            ${aiError ? `<p class="job-meta">AI extraction issue: ${escapeHtml(aiError)}</p>` : ""}
           </div>
         </div>
         <div class="job-card-side">
@@ -277,6 +279,7 @@
     }
 
     const qualifications = getQualifications(job);
+    const aiError = getAiExtractionError(job);
     if (!state.selectedQualificationId || !qualifications.some((qualification) => qualification.id === state.selectedQualificationId)) {
       state.selectedQualificationId = qualifications[0] ? qualifications[0].id : null;
     }
@@ -285,7 +288,9 @@
     const selectedNode = getSelectedNode(job, selectedQualification);
     const counts = getCounts(job);
 
-    elements.reviewSubtitle.textContent = `${job.fileName} | Discovered ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} in this specification | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"} | Source ${describeExtractionSource(job)}`;
+    elements.reviewSubtitle.textContent = aiError
+      ? `${job.fileName} | AI extraction returned no reviewable qualifications | Source ${describeExtractionSource(job)}`
+      : `${job.fileName} | Discovered ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} in this specification | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"} | Source ${describeExtractionSource(job)}`;
     elements.pageBadge.textContent = job.pages ? `Page ${job.pages.current} of ${job.pages.total}` : "Page pending";
     setReviewBadge(job);
     renderDocumentPanel(job, selectedNode);
@@ -335,6 +340,7 @@
 
   function renderValidationRail(job) {
     const summary = job.validationSummary || { counts: getCounts(job) };
+    const aiError = getAiExtractionError(job);
     elements.validationRail.innerHTML = `
       <div class="validation-summary-head">
         <div>
@@ -364,6 +370,7 @@
           <strong>${job.status === "review" ? "Yes" : "After extraction"}</strong>
         </div>
       </div>
+      ${aiError ? `<div class="empty-state"><h4>AI extraction failed</h4><p>${escapeHtml(aiError)}</p></div>` : ""}
     `;
   }
 
@@ -399,7 +406,10 @@
   function renderTree(job, qualification) {
     elements.hierarchyTree.innerHTML = "";
     if (!qualification) {
-      elements.hierarchyTree.innerHTML = "<div class=\"empty-state\"><h4>Extraction is still running</h4><p>The hierarchy appears here once mapping completes.</p></div>";
+      const aiError = getAiExtractionError(job);
+      elements.hierarchyTree.innerHTML = aiError
+        ? `<div class="empty-state"><h4>No qualifications were extracted</h4><p>${escapeHtml(aiError)}</p></div>`
+        : "<div class=\"empty-state\"><h4>Extraction is still running</h4><p>The hierarchy appears here once mapping completes.</p></div>";
       return;
     }
 
@@ -564,10 +574,15 @@
 
   function renderApprovalPanel(job) {
     const summary = job.validationSummary || { counts: getCounts(job) };
-    const approvalHeadline = job.reviewReady ? "Ready to persist" : "Waiting for extraction";
-    const approvalCopy = job.reviewReady
-      ? "Review the discovered qualification structures, expand the groups you need, and persist when ready."
-      : "Persistence becomes available after extraction finishes and at least one qualification structure is available.";
+    const aiError = getAiExtractionError(job);
+    const approvalHeadline = aiError
+      ? "AI extraction failed"
+      : job.reviewReady ? "Ready to persist" : "Waiting for extraction";
+    const approvalCopy = aiError
+      ? "The uploaded PDF reached the review workspace without any extracted qualifications. Resolve the AI issue and reprocess the job."
+      : job.reviewReady
+        ? "Review the discovered qualification structures, expand the groups you need, and persist when ready."
+        : "Persistence becomes available after extraction finishes and at least one qualification structure is available.";
 
     elements.approvalPanel.innerHTML = `
       <div class="approval-card">
@@ -579,6 +594,7 @@
           ${createBadgeMarkup(getReviewStateLabel(job), getReviewStateVariant(job))}
         </div>
         <p class="muted">${escapeHtml(approvalCopy)}</p>
+        ${aiError ? `<p class="muted">Reason: ${escapeHtml(aiError)}</p>` : ""}
         <div class="approval-metrics">
           <div><span>Qualifications</span><strong>${summary.counts.qualifications}</strong></div>
           <div><span>Shared units</span><strong>${summary.counts.sharedUnits}</strong></div>
@@ -834,6 +850,9 @@
   }
 
   function getReviewStateLabel(job) {
+    if (getAiExtractionError(job)) {
+      return "Extraction failed";
+    }
     if (job.status === "persisted") {
       return "Persisted";
     }
@@ -848,6 +867,9 @@
 
   function getReviewStateVariant(job) {
     const label = getReviewStateLabel(job);
+    if (label === "Extraction failed") {
+      return "badge-danger";
+    }
     if (label === "Persisted" || label === "Ready to persist") {
       return "badge-success";
     }
@@ -875,6 +897,13 @@
       return `${provider}:${job.extractionMeta.model}`;
     }
     return provider;
+  }
+
+  function getAiExtractionError(job) {
+    if (!job || !job.extractionMeta || typeof job.extractionMeta.aiError !== "string") {
+      return "";
+    }
+    return job.extractionMeta.aiError.trim();
   }
 
   function confidenceLabel(node) {
