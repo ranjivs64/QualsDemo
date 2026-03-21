@@ -59,6 +59,8 @@ inputs:
 
 The product must extract qualification structures from uploaded PDFs, display the extracted structure in a web application, support reviewer edits and reprocessing, and persist reviewer-confirmed structures through a newly created API and backing database. The current product direction requires the review experience to summarize how many qualifications were discovered in each specification, show the structure for every qualification found, support shared units reused across qualifications, and make hierarchy groups expandable and collapsible for navigation. The target schema is defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md) and expanded in [PRD-1.md](../prd/PRD-1.md).
 
+An additional implementation constraint now exists: the active extractor prompt defines an authoritative external AI contract that does not match the application's legacy internal review graph. The architecture therefore needs an explicit compatibility boundary so the external AI contract can evolve without forcing same-day changes to review, persistence, and UI consumers.
+
 ### Requirements
 - Web application delivery surface.
 - AI-assisted extraction for semistructured qualification PDFs.
@@ -141,6 +143,7 @@ We will build a web-based, asynchronous, human-in-the-loop extraction platform c
 
 ### Key architectural choices
 - Use managed layout-aware document AI behind a provider adapter rather than a direct hard-coded vendor dependency.
+- Use a two-contract boundary: authoritative AI output externally, deterministic normalization into the current internal review graph internally.
 - Use asynchronous extraction jobs instead of synchronous request-response processing for the full workflow.
 - Use a relational database as the system of record because qualifications, units, grade schemes, groups, and rulesets are highly relational.
 - Use a dedicated persistence API boundary between review workflow and database writes.
@@ -289,7 +292,7 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 
 ### High-level implementation plan
 1. Define the relational schema and persistence API contract for the qualification model.
-2. Build the asynchronous ingestion, extraction, mapping, and review-summary enrichment pipeline.
+2. Build the asynchronous ingestion, authoritative-schema validation, normalization, mapping, and review-summary enrichment pipeline.
 3. Build the web review workspace with hierarchy visualization, discovered-qualification summaries, collapsible navigation, source linkage, edit, reprocess, and approval flows.
 4. Add audit, retention, monitoring, and provider evaluation controls.
 
@@ -314,7 +317,7 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 ### Agent architecture pattern
 - Single extraction pipeline with deterministic post-processing
 - Human-in-the-loop review and approval
-- Hybrid architecture with AI-assisted extraction and deterministic normalization
+- Hybrid architecture with AI-assisted extraction, an authoritative external AI contract, and deterministic normalization into the internal review graph
 
 ### Inference pipeline
 

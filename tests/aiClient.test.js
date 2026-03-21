@@ -141,3 +141,114 @@ test("connectivity check succeeds with an injected client", { concurrency: false
   assert.equal(result.model, "gpt-5.1-2026-01-15");
   assert.equal(result.message, "OK");
 });
+
+test("extractQualificationWithAi normalizes authoritative payloads into the internal review graph", { concurrency: false }, async () => {
+  process.env.OPENAI_API_KEY = "test-openai-key";
+  const aiClient = loadAiClient();
+  const fallbackDraft = {
+    qualificationCode: "603/0455/0",
+    confidence: 78,
+    reviewReady: false,
+    pages: { current: 1, total: 92 },
+    documentFocus: { top: 28, height: 12, label: "Focus pending" },
+    qualification: {
+      id: "qualification-draft",
+      kind: "Qualification",
+      title: "Fallback Qualification",
+      confidence: 78,
+      fields: {
+        qualificationName: "Fallback Qualification",
+        code: "603/0455/0",
+        qualificationType: "Diploma",
+        level: "Level 3",
+        awardingBody: "Pearson",
+        sizeGlh: "Pending",
+        sizeCredits: "Pending",
+        gradingScheme: "Pending",
+        totalQualificationTime: "Pending"
+      },
+      children: []
+    },
+    qualifications: []
+  };
+  const fakeClient = {
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  Qualifications: {
+                    confidence: 86,
+                    needsAttention: false,
+                    guidance: "",
+                    qualifications: [
+                      {
+                        id: "extended-diploma",
+                        qualificationName: "Pearson BTEC Level 3 National Extended Diploma in Business",
+                        qualificationType: "Diploma",
+                        level: "Level 3",
+                        awardingBody: "Pearson",
+                        gradingScheme: "Pass / Merit / Distinction",
+                        derivedFrom: null,
+                        rulesOfCombination: {
+                          totalCredits: 180,
+                          mandatoryCredits: 120,
+                          optionalCredits: 60,
+                          constraints: ["Complete all mandatory units"]
+                        },
+                        unitGroups: [
+                          {
+                            id: "group-mandatory",
+                            groupType: "Mandatory",
+                            selectionRule: "All listed units must be completed",
+                            minimumCredits: 120,
+                            maximumCredits: null,
+                            units: [
+                              {
+                                unitNumber: "Unit 1",
+                                unitTitle: "Exploring Business",
+                                glh: 90,
+                                creditValue: 10,
+                                assessmentType: "Internal",
+                                learningObjectives: [
+                                  {
+                                    id: "lo-1",
+                                    text: "Explore the features of business activity."
+                                  }
+                                ],
+                                confidence: 88,
+                                needsAttention: false,
+                                guidance: ""
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                })
+              }
+            }
+          ]
+        })
+      }
+    }
+  };
+
+  const result = await aiClient.extractQualificationWithAi({
+    fileName: "business-spec.pdf",
+    documentText: "Qualification text",
+    fallbackDraft,
+    client: fakeClient
+  });
+
+  assert.equal(result.qualification.kind, "Qualification");
+  assert.equal(result.qualifications.length, 1);
+  assert.equal(result.qualification.children[0].kind, "Unit Group");
+  assert.equal(result.qualification.children[0].children[0].kind, "Unit");
+  assert.equal(result.qualification.children[0].children[0].children[0].kind, "Learning Outcome");
+  assert.equal(result.qualificationCode, "603/0455/0");
+  assert.equal(result.extractionMeta.contractVersion, "qualification-authoritative-v1");
+});

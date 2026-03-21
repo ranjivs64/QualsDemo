@@ -450,6 +450,8 @@ function mergeDraft(fallbackDraft, aiDraft, parsedDocument) {
       : fallbackDraft.qualifications,
     sourceTextExcerpt: fallbackDraft.sourceTextExcerpt,
     extractionMeta: {
+      ...fallbackDraft.extractionMeta,
+      ...(aiDraft.extractionMeta || {}),
       provider: getAiProviderName(),
       model: getModelName(),
       pageCount: parsedDocument.pageCount || fallbackDraft.pages.total,

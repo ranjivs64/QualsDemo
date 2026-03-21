@@ -1,0 +1,214 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Qualifications"
+  ],
+  "properties": {
+    "Qualifications": {
+      "$ref": "#/$defs/qualificationsEnvelope"
+    }
+  },
+  "$defs": {
+    "qualificationsEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confidence",
+        "needsAttention",
+        "guidance",
+        "qualifications"
+      ],
+      "properties": {
+        "confidence": {
+          "type": "number"
+        },
+        "needsAttention": {
+          "type": "boolean"
+        },
+        "guidance": {
+          "type": "string"
+        },
+        "qualifications": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/qualification"
+          }
+        }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "qualificationName",
+        "qualificationType",
+        "level",
+        "awardingBody",
+        "gradingScheme",
+        "derivedFrom",
+        "rulesOfCombination",
+        "unitGroups"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "qualificationName": {
+          "type": "string"
+        },
+        "qualificationType": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "awardingBody": {
+          "type": "string"
+        },
+        "gradingScheme": {
+          "type": "string"
+        },
+        "derivedFrom": {
+          "type": ["string", "null"]
+        },
+        "rulesOfCombination": {
+          "$ref": "#/$defs/rulesOfCombination"
+        },
+        "unitGroups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unitGroup"
+          }
+        }
+      }
+    },
+    "rulesOfCombination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "totalCredits",
+        "mandatoryCredits",
+        "optionalCredits",
+        "constraints"
+      ],
+      "properties": {
+        "totalCredits": {
+          "type": ["number", "null"]
+        },
+        "mandatoryCredits": {
+          "type": ["number", "null"]
+        },
+        "optionalCredits": {
+          "type": ["number", "null"]
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "unitGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "groupType",
+        "selectionRule",
+        "minimumCredits",
+        "maximumCredits",
+        "units"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "groupType": {
+          "type": "string",
+          "enum": ["Mandatory", "Optional", "Pathway", "Other"]
+        },
+        "selectionRule": {
+          "type": "string"
+        },
+        "minimumCredits": {
+          "type": ["number", "null"]
+        },
+        "maximumCredits": {
+          "type": ["number", "null"]
+        },
+        "units": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unit"
+          }
+        }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unitNumber",
+        "unitTitle",
+        "glh",
+        "creditValue",
+        "assessmentType",
+        "learningObjectives",
+        "confidence",
+        "needsAttention",
+        "guidance"
+      ],
+      "properties": {
+        "unitNumber": {
+          "type": "string"
+        },
+        "unitTitle": {
+          "type": "string"
+        },
+        "glh": {
+          "type": ["number", "null"]
+        },
+        "creditValue": {
+          "type": ["number", "null"]
+        },
+        "assessmentType": {
+          "type": ["string", "null"]
+        },
+        "learningObjectives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/learningObjective"
+          }
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "needsAttention": {
+          "type": "boolean"
+        },
+        "guidance": {
+          "type": "string"
+        }
+      }
+    },
+    "learningObjective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

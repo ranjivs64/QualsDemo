@@ -169,7 +169,7 @@ sequenceDiagram
 | Application API | Keep Node.js API as the system entrypoint | Continues to own upload, job state, review, approval, and persistence orchestration |
 | Extraction worker | Keep extraction orchestration in Node.js | Existing `server/extractionService.js` remains the workflow boundary |
 | AI provider | Replace direct provider coupling with an Azure AI Foundry adapter | Foundry becomes the managed model and evaluation control plane |
-| Prompt and schema assets | Keep prompt markdown and JSON schema in the repo | Prompt and structured output contract remain version-controlled artifacts |
+| Prompt and schema assets | Keep prompt markdown and JSON schema assets in the repo | The external authoritative schema remains version-controlled separately from the internal normalized review contract |
 | Fallback extraction | Keep heuristic parser as a resilience path | Local development and degraded-mode extraction should continue to work without cloud AI |
 | Observability | Extend OpenTelemetry to Azure Application Insights | Preserve current tracing model while moving telemetry to a centralized backend |
 | Evaluation | Add Foundry evaluation runs before model changes | Use schema compliance, completeness, and quality thresholds before promotion |
@@ -193,7 +193,7 @@ This target keeps the current application architecture intact while moving model
 | File storage | Local filesystem | Uploaded PDFs retained in a server-side uploads folder for one day |
 | PDF extraction | `pdf-parse` | Used to recover text before heuristic or AI-based extraction |
 | AI extraction | Provider adapter over the OpenAI-compatible SDK | Supports direct OpenAI configuration today and Azure AI Foundry through a provider-specific endpoint and key |
-| AI prompt contract | Markdown prompt plus JSON schema | Prompt and schema are stored as repo files, not inline strings |
+| AI prompt contract | Authoritative prompt plus authoritative structured-output schema, then normalized internal review graph | External and internal contracts are intentionally separated so prompt evolution does not directly break review consumers |
 | Observability | OpenTelemetry API and Node tracer provider | Current tracing is focused on AI extraction spans |
 | Testing | Node built-in test runner | Covers workflow state, extraction fallback, and normalized persistence |
 
@@ -207,8 +207,10 @@ This target keeps the current application architecture intact while moving model
 | Relational schema and queries | `server/database.js` |
 | Extraction orchestration | `server/extractionService.js` |
 | AI client integration | `server/aiClient.js` |
+| AI draft normalizer | `server/aiDraftNormalizer.js` |
 | Prompt definition | `prompts/qualification-extractor.md` |
-| Structured output schema | `templates/qualification-extraction-schema.json` |
+| Authoritative structured output schema | `templates/qualification-extraction-authoritative-schema.json` |
+| Internal normalized review contract reference | `templates/qualification-extraction-schema.json` |
 
 ### 4.3 Target production posture
 
@@ -744,7 +746,7 @@ The architecture should capture traceable workflow correlation from upload to ap
 | Domain integrity tests | Qualification graph integrity, shared-unit reuse, learning outcome linkage, assessment criteria linkage, rule set integrity, grade ordering, and structure summary correctness |
 | API contract tests | Upload, review, approval, submission contracts |
 | Workflow integration tests | Upload to draft, edit and reprocess, review structure summaries, approve and submit |
-| Provider adapter tests | Normalize provider output into internal extraction model |
+| Provider adapter tests | Validate authoritative schema compliance and normalization into the internal extraction model |
 | Review UI tests | Hierarchy navigation, shared-unit indicators, collapsible group behavior, outcome and criteria review, edit flow, source linking, approval flow |
 | Accessibility tests | WCAG AA checks on review workflow |
 | Evaluation corpus tests | Compare extraction output against approved target structures, including multi-qualification documents and shared-unit cases |
@@ -772,15 +774,20 @@ Before production rollout, the platform should demonstrate:
 
 ## 13. Migration Plan
 
+The migration now uses a two-contract posture:
+- external AI contract: authoritative `Qualifications` payload defined by the prompt and authoritative schema,
+- internal review contract: existing graph-shaped draft consumed by review, approval, and persistence flows.
+
+Phase 1 stabilizes that boundary before any broader review-UX or persistence redesign.
+
 ### 13.1 Phase sequence
 
 | Phase | Objective |
 |------|-----------|
-| Phase 1 | Create database schema and persistence API |
-| Phase 2 | Create upload, extraction, mapping, shared-unit identity, and draft persistence workflow |
-| Phase 3 | Create review web app with structure summaries, collapsible navigation, edit, and reprocess paths |
-| Phase 4 | Enable approval and submission to persistence API |
-| Phase 5 | Pilot evaluation and provider tuning |
+| Phase 0 | Stabilize the AI contract by adding the authoritative schema and normalization boundary |
+| Phase 1 | Keep the current review and persistence workflow running on the normalized internal graph |
+| Phase 2 | Extend review and persistence to expose more authoritative concepts such as pathways and rules of combination |
+| Phase 3 | Pilot evaluation, provider tuning, and longer-term model decisions |
 
 ### 13.2 Data migration posture
 

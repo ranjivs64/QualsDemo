@@ -4,9 +4,10 @@ const OpenAI = require("openai");
 const { AzureOpenAI } = require("openai");
 const { SpanStatusCode } = require("@opentelemetry/api");
 const { getTracer, initializeTracing } = require("./observability");
+const { AUTHORITATIVE_CONTRACT_VERSION, normalizeAuthoritativeAiPayload } = require("./aiDraftNormalizer");
 
 const promptPath = path.join(__dirname, "..", "prompts", "qualification-extractor.md");
-const schemaPath = path.join(__dirname, "..", "templates", "qualification-extraction-schema.json");
+const schemaPath = path.join(__dirname, "..", "templates", "qualification-extraction-authoritative-schema.json");
 const tracer = getTracer();
 
 let client;
@@ -158,17 +159,11 @@ function validateAiPayload(payload) {
   if (!payload || typeof payload !== "object") {
     throw new Error("AI response was empty.");
   }
-  if (Array.isArray(payload.qualifications) && payload.qualifications.length > 0) {
-    if (!payload.qualification) {
-      payload.qualification = payload.qualifications[0];
-    }
-  } else if (payload.qualification && payload.qualification.kind === "Qualification") {
-    payload.qualifications = [payload.qualification];
-  } else {
-    throw new Error("AI response did not return any qualification root nodes.");
+  if (!payload.Qualifications || typeof payload.Qualifications !== "object") {
+    throw new Error("AI response omitted the authoritative Qualifications envelope.");
   }
-  if (!payload.pages || typeof payload.pages.total !== "number") {
-    throw new Error("AI response omitted page metadata.");
+  if (!Array.isArray(payload.Qualifications.qualifications) || !payload.Qualifications.qualifications.length) {
+    throw new Error("AI response did not return any authoritative qualification nodes.");
   }
   return payload;
 }
@@ -239,13 +234,13 @@ async function runAiConnectivityCheck(options = {}) {
   });
 }
 
-async function extractQualificationWithAi({ fileName, documentText, fallbackDraft }) {
+async function extractQualificationWithAi({ fileName, documentText, fallbackDraft, client: injectedClient }) {
   return tracer.startActiveSpan("qualextract.ai.extract", async (span) => {
     const prompt = readPrompt();
     const schema = readSchema();
     const model = getModelName();
     const provider = getAiProviderName();
-    const clientInstance = getClient();
+    const clientInstance = injectedClient || getClient();
     const truncatedText = String(documentText || "").slice(0, 20000);
 
     span.setAttribute("qualextract.provider", provider);
@@ -284,8 +279,14 @@ async function extractQualificationWithAi({ fileName, documentText, fallbackDraf
             ? completion.choices[0].message.content
             : "");
           const payload = validateAiPayload(JSON.parse(content));
+          const normalizedDraft = normalizeAuthoritativeAiPayload(payload, fallbackDraft);
+          span.setAttribute(
+            "qualextract.authoritative_qualification_count",
+            payload.Qualifications.qualifications.length
+          );
+          span.setAttribute("qualextract.contract_version", AUTHORITATIVE_CONTRACT_VERSION);
           span.setStatus({ code: SpanStatusCode.OK });
-          return payload;
+          return normalizedDraft;
         } catch (error) {
           if (attempt === 3) {
             throw error;
