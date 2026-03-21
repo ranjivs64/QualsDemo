@@ -23,7 +23,23 @@ param location string = resourceGroup().location
 param appServiceSkuName string = 'B1'
 
 @description('Azure OpenAI deployment API version used by the application.')
-param foundryApiVersion string = '2024-10-21'
+param foundryApiVersion string = '2025-03-01-preview'
+
+@description('Azure AI Document Intelligence API version used by the application.')
+param documentIntelligenceApiVersion string = '2024-11-30'
+
+@description('Azure AI Document Intelligence model used by the application.')
+param documentIntelligenceModel string = 'prebuilt-layout'
+
+@description('Azure AI Document Intelligence output format used by the application.')
+@allowed([
+  'markdown'
+  'text'
+])
+param documentIntelligenceOutputFormat string = 'markdown'
+
+@description('Key Vault secret name that stores the Document Intelligence API key.')
+param documentIntelligenceApiKeySecretName string = 'document-intelligence-api-key'
 
 @description('Azure OpenAI model or deployment name used by the application.')
 param foundryModel string = 'gpt-5'
@@ -55,6 +71,7 @@ var appServicePlanName = 'asp-${projectName}-${environmentName}'
 var appInsightsName = 'appi-${projectName}-${environmentName}'
 var keyVaultName = take('kv${normalizedProjectName}${environmentName}${resourceSuffix}', 24)
 var openAiAccountName = take('aoai${normalizedProjectName}${environmentName}${resourceSuffix}', 24)
+var documentIntelligenceAccountName = take('di${normalizedProjectName}${environmentName}${resourceSuffix}', 24)
 var openAiDeploymentName = take(replace(toLower(foundryModel), '.', '-'), 64)
 var commonTags = {
   Environment: environmentName
@@ -113,6 +130,20 @@ resource openAiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
 }
 
+resource documentIntelligenceAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+  name: documentIntelligenceAccountName
+  location: location
+  kind: 'FormRecognizer'
+  tags: commonTags
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    customSubDomainName: documentIntelligenceAccountName
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
 resource openAiDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
   parent: openAiAccount
   name: openAiDeploymentName
@@ -135,6 +166,14 @@ resource foundryApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   name: foundryApiKeySecretName
   properties: {
     value: openAiAccount.listKeys().key1
+  }
+}
+
+resource documentIntelligenceApiKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVault
+  name: documentIntelligenceApiKeySecretName
+  properties: {
+    value: documentIntelligenceAccount.listKeys().key1
   }
 }
 
@@ -172,60 +211,11 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       http20Enabled: true
       linuxFxVersion: 'NODE|24-lts'
       minTlsVersion: '1.2'
-      appSettings: [
-        {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: applicationInsights.properties.ConnectionString
-        }
-        {
-          name: 'NODE_ENV'
-          value: nodeEnvironment
-        }
-        {
-          name: 'QUAL_AI_PROVIDER'
-          value: 'foundry'
-        }
-        {
-          name: 'FOUNDRY_ENDPOINT'
-          value: openAiAccount.properties.endpoint
-        }
-        {
-          name: 'FOUNDRY_API_VERSION'
-          value: foundryApiVersion
-        }
-        {
-          name: 'QUAL_AI_MODEL'
-          value: openAiDeployment.name
-        }
-        {
-          name: 'FOUNDRY_API_KEY'
-          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=${foundryApiKeySecretName})'
-        }
-        {
-          name: 'ENABLE_ORYX_BUILD'
-          value: 'false'
-        }
-        {
-          name: 'QUAL_DB_PATH'
-          value: '/home/site/data/qualextract.sqlite'
-        }
-        {
-          name: 'QUAL_UPLOADS_DIR'
-          value: '/home/site/uploads'
-        }
-        {
-          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'false'
-        }
-        {
-          name: 'WEBSITE_RUN_FROM_PACKAGE'
-          value: '1'
-        }
-      ]
     }
   }
   dependsOn: [
     foundryApiKeySecret
+    documentIntelligenceApiKeySecret
   ]
 }
 
@@ -247,6 +237,36 @@ resource keyVaultWebAppAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@20
   }
 }
 
+resource webAppAppSettings 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: webApp
+  name: 'appsettings'
+  properties: {
+    APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsights.properties.ConnectionString
+    NODE_ENV: nodeEnvironment
+    QUAL_AI_PROVIDER: 'foundry'
+    DOCUMENT_INTELLIGENCE_ENDPOINT: documentIntelligenceAccount.properties.endpoint
+    DOCUMENT_INTELLIGENCE_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=${documentIntelligenceApiKeySecretName})'
+    DOCUMENT_INTELLIGENCE_API_VERSION: documentIntelligenceApiVersion
+    DOCUMENT_INTELLIGENCE_MODEL: documentIntelligenceModel
+    DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT: documentIntelligenceOutputFormat
+    DOCUMENT_INTELLIGENCE_TIMEOUT_MS: '120000'
+    FOUNDRY_ENDPOINT: openAiAccount.properties.endpoint
+    FOUNDRY_API_VERSION: foundryApiVersion
+    QUAL_AI_MODEL: openAiDeployment.name
+    FOUNDRY_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=${foundryApiKeySecretName})'
+    ENABLE_ORYX_BUILD: 'false'
+    QUAL_DB_PATH: '/home/site/data/qualextract.sqlite'
+    QUAL_UPLOADS_DIR: '/home/site/uploads'
+    SCM_DO_BUILD_DURING_DEPLOYMENT: 'false'
+    WEBSITE_RUN_FROM_PACKAGE: '1'
+  }
+  dependsOn: [
+    foundryApiKeySecret
+    documentIntelligenceApiKeySecret
+    keyVaultWebAppAccessPolicy
+  ]
+}
+
 output webAppName string = webApp.name
 output webAppHostName string = webApp.properties.defaultHostName
 output keyVaultName string = keyVault.name
@@ -255,3 +275,5 @@ output appServicePlanName string = appServicePlan.name
 output openAiAccountName string = openAiAccount.name
 output openAiEndpoint string = openAiAccount.properties.endpoint
 output openAiDeploymentName string = openAiDeployment.name
+output documentIntelligenceAccountName string = documentIntelligenceAccount.name
+output documentIntelligenceEndpoint string = documentIntelligenceAccount.properties.endpoint

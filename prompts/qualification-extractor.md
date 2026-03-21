@@ -52,13 +52,22 @@ If information exists but cannot be reliably extracted, the agent MUST:
 ```json
 {
   "fileName": "string",
-  "sourceDocument": "attached PDF file"
+  "sourceDocument": "Azure AI Document Intelligence layout analysis",
+  "contentFormat": "markdown | text",
+  "pageCount": 0,
+  "paragraphCount": 0,
+  "tableCount": 0,
+  "sectionCount": 0,
+  "figureCount": 0,
+  "keyValuePairCount": 0
 }
 ```
 
-The attached PDF file is the only evidence source.
+The Azure AI Document Intelligence extracted content is the only evidence source.
 
 `fileName` may be used for labeling and traceability, but MUST NOT override or supplement document evidence.
+
+The extracted Markdown or text preserves document structure such as headings, tables, figures, and page boundaries. Use only that extracted content as evidence. Do not assume access to the original PDF bytes, images, or layout beyond what Document Intelligence provided.
 
 ---
 

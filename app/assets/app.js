@@ -186,15 +186,19 @@
     const source = aiStatus.provider === "foundry"
       ? `Azure AI Foundry (${aiStatus.model})`
       : `${aiStatus.provider} (${aiStatus.model})`;
+    const documentIntelligence = aiStatus.documentIntelligence || null;
+    const documentSource = documentIntelligence
+      ? `Azure AI Document Intelligence (${documentIntelligence.model || "prebuilt-layout"}, ${documentIntelligence.outputFormat || "markdown"})`
+      : "Azure AI Document Intelligence";
 
     if (aiStatus.configured) {
       elements.aiStatusBanner.className = "status-banner status-banner-success";
-      elements.aiStatusText.textContent = `${source} is configured and ready for extraction.`;
+      elements.aiStatusText.textContent = `${documentSource} and ${source} are configured and ready for extraction.`;
       return;
     }
 
     elements.aiStatusBanner.className = "status-banner status-banner-warning";
-    elements.aiStatusText.textContent = `${source} is not ready. ${aiStatus.issues.join(" ")} AI extraction requires a configured provider and an uploaded PDF artifact.`;
+    elements.aiStatusText.textContent = `${documentSource} and ${source} must both be configured. ${aiStatus.issues.join(" ")} Extraction also requires an uploaded PDF artifact.`;
   }
 
   function renderDashboardJobs() {
@@ -210,6 +214,15 @@
       const counts = getCounts(job);
       const aiError = getAiExtractionError(job);
       const actionLabel = job.status === "persisted" ? "View" : job.status === "processing" ? "Track" : "Review";
+      const qualifications = getQualifications(job);
+      const qualTagsHtml = qualifications.length ? `
+        <div class="job-quals">
+          ${qualifications.slice(0, 3).map((q) => {
+            const code = q.fields && (q.fields.code || q.fields.qualificationCode) ? ` (${q.fields.code || q.fields.qualificationCode})` : "";
+            return `<span class="qual-tag" title="${escapeAttribute(q.title)}">${escapeHtml(q.title)}${escapeHtml(code)}</span>`;
+          }).join("")}
+          ${qualifications.length > 3 ? `<span class="qual-tag qual-tag-more">+${qualifications.length - 3} more</span>` : ""}
+        </div>` : "";
       const card = document.createElement("article");
       card.className = "job-card";
       card.innerHTML = `
@@ -217,9 +230,9 @@
           <div class="job-icon" aria-hidden="true"></div>
           <div>
             <h4 class="job-name">${escapeHtml(job.fileName)}</h4>
-            <p class="job-meta">${escapeHtml(getStatusLabel(job.status))} | ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} discovered | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"}</p>
-            <p class="job-meta">Confidence ${job.confidence || 0}% | Attempt ${job.attempts} | Source ${escapeHtml(describeExtractionSource(job))} | Updated ${escapeHtml(formatDate(job.updatedAt))}</p>
-            ${aiError ? `<p class="job-meta">AI extraction issue: ${escapeHtml(aiError)}</p>` : ""}
+            <p class="job-meta">${escapeHtml(getStatusLabel(job.status))} | ${counts.qualifications} qual${counts.qualifications === 1 ? "" : "s"} | ${counts.sharedUnits} shared | ${escapeHtml(formatDate(job.updatedAt))}</p>
+            ${aiError ? `<p class="job-meta" style="color:var(--danger)">&#9888; ${escapeHtml(aiError)}</p>` : ""}
+            ${qualTagsHtml}
           </div>
         </div>
         <div class="job-card-side">
@@ -447,18 +460,24 @@
       row.appendChild(spacer);
     }
 
+    const kindSlug = node.kind.toLowerCase().replace(/\s+/g, "-");
+    const isLearningOutcome = /learning.?outcome/i.test(node.kind);
     const card = document.createElement("button");
     card.type = "button";
     card.className = `tree-card ${state.selectedNodeId === node.id ? "is-selected" : ""}`;
+    card.dataset.kind = kindSlug;
+    if (isLearningOutcome) {
+      card.title = node.title;
+    }
     card.innerHTML = `
       <div class="tree-card-head">
-        <span class="tree-kind">${escapeHtml(node.kind)}</span>
+        <span class="tree-kind tree-kind--${kindSlug}">${escapeHtml(node.kind)}</span>
         <div class="tree-badges">
           ${createBadgeMarkup(confidenceLabel(node), confidenceVariant(node.confidence || 0))}
           ${sharedUnitIndex.has(node.id) ? createBadgeMarkup(`Shared ${sharedUnitIndex.get(node.id).count}x`, "badge-neutral") : ""}
         </div>
       </div>
-      <h4 class="tree-title">${escapeHtml(node.title)}</h4>
+      <h4 class="tree-title${isLearningOutcome ? " tree-title--single-line" : ""}">${escapeHtml(node.title)}</h4>
       <p class="tree-summary">${escapeHtml(node.summary || "No summary available")}</p>
     `;
     card.addEventListener("click", () => {

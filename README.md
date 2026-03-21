@@ -43,7 +43,7 @@ Current runtime characteristics:
 - HTTP layer: built-in `node:http`
 - Database: SQLite via `node:sqlite`
 - AI SDK: `openai` package with `OpenAI` and `AzureOpenAI`
-- PDF parsing: `pdf-parse` for page count and source excerpt metadata only
+- Document analysis: Azure AI Document Intelligence `prebuilt-layout` with markdown output
 - Telemetry: OpenTelemetry API and Node tracer provider
 
 Important implementation notes:
@@ -51,8 +51,8 @@ Important implementation notes:
 - The app currently uses local file storage for uploads.
 - The app currently uses SQLite for persistence.
 - Background extraction is scheduled in-process with `setTimeout(...)`.
-- Qualification extraction now requires a configured AI provider and an uploaded PDF artifact.
-- The uploaded PDF is sent directly to the model; the app no longer generates heuristic qualification drafts.
+- Qualification extraction now requires both Azure AI Document Intelligence and a configured LLM provider, plus an uploaded PDF artifact.
+- The uploaded PDF is first analyzed by Azure AI Document Intelligence, and the resulting structured markdown is then passed to the model; the app no longer generates heuristic qualification drafts.
 - The app is suitable today for local use and internal single-instance staging.
 - The app is not yet approved for public production exposure.
 
@@ -94,9 +94,16 @@ Example using Azure AI Foundry:
 
 ```env
 QUAL_AI_PROVIDER=foundry
+QUAL_AI_TIMEOUT_MS=120000
+DOCUMENT_INTELLIGENCE_ENDPOINT=https://<your-document-intelligence-resource>.cognitiveservices.azure.com
+DOCUMENT_INTELLIGENCE_API_KEY=<your-document-intelligence-key>
+DOCUMENT_INTELLIGENCE_API_VERSION=2024-11-30
+DOCUMENT_INTELLIGENCE_MODEL=prebuilt-layout
+DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT=markdown
+DOCUMENT_INTELLIGENCE_TIMEOUT_MS=120000
 FOUNDRY_API_KEY=<your-foundry-key>
 FOUNDRY_ENDPOINT=https://<your-resource-name>.openai.azure.com
-FOUNDRY_API_VERSION=2024-10-21
+FOUNDRY_API_VERSION=2025-03-01-preview
 QUAL_AI_MODEL=gpt-5
 QUAL_DB_PATH=server/data/qualextract.sqlite
 QUAL_UPLOADS_DIR=server/uploads
@@ -106,6 +113,13 @@ Example using OpenAI:
 
 ```env
 QUAL_AI_PROVIDER=openai
+QUAL_AI_TIMEOUT_MS=120000
+DOCUMENT_INTELLIGENCE_ENDPOINT=https://<your-document-intelligence-resource>.cognitiveservices.azure.com
+DOCUMENT_INTELLIGENCE_API_KEY=<your-document-intelligence-key>
+DOCUMENT_INTELLIGENCE_API_VERSION=2024-11-30
+DOCUMENT_INTELLIGENCE_MODEL=prebuilt-layout
+DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT=markdown
+DOCUMENT_INTELLIGENCE_TIMEOUT_MS=120000
 OPENAI_API_KEY=<your-openai-key>
 QUAL_AI_MODEL=gpt-5.1-2026-01-15
 QUAL_DB_PATH=server/data/qualextract.sqlite
@@ -114,8 +128,12 @@ QUAL_UPLOADS_DIR=server/uploads
 
 Notes:
 
+- Azure OpenAI extraction uses the Responses API. When you configure Foundry via `FOUNDRY_ENDPOINT`, use `FOUNDRY_API_VERSION=2025-03-01-preview` or later.
+- Azure AI Document Intelligence should use `DOCUMENT_INTELLIGENCE_MODEL=prebuilt-layout` with `DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT=markdown` so the LLM receives preserved headings, tables, and page boundaries.
+- `QUAL_AI_TIMEOUT_MS` defaults to `120000` and should remain high enough for multi-page PDF extraction jobs.
+- `DOCUMENT_INTELLIGENCE_TIMEOUT_MS` defaults to `120000` and should remain high enough for large PDFs.
 - Use either `FOUNDRY_ENDPOINT` or `FOUNDRY_BASE_URL`, not both.
-- If no AI provider is configured, the app still runs, but extraction jobs remain in review with an `aiError` until AI configuration is fixed.
+- If Document Intelligence or the LLM provider is not configured, the app still runs, but extraction jobs remain in review with an `aiError` until configuration is fixed.
 
 ### 3. Validate AI connectivity
 
@@ -297,6 +315,8 @@ These values are created and populated by the deployment flow:
 - `FOUNDRY_API_VERSION`
 - `FOUNDRY_MODEL`
 - `FOUNDRY_API_KEY`
+
+The default infrastructure value for `FOUNDRY_API_VERSION` is `2025-03-01-preview`, which is the minimum Azure preview API version that exposes the Responses API used by live PDF extraction.
 
 You do not need to store `AZURE_SUBSCRIPTION_ID` or `AZURE_RESOURCE_GROUP` at the repository level if you prefer passing them at workflow runtime, but the workflow supports both approaches.
 

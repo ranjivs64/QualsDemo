@@ -134,11 +134,49 @@ function parseMultipartFormData(req) {
 }
 
 function scheduleExtraction(job) {
+  console.info("Scheduling extraction job", {
+    jobId: job.id,
+    fileName: job.fileName,
+    attempts: job.attempts
+  });
+
   setTimeout(() => {
+    console.info("Starting extraction job", {
+      jobId: job.id,
+      fileName: job.fileName,
+      attempts: job.attempts
+    });
+
     processExtractionJob(job.id).catch((error) => {
       console.error("Extraction job failed", { jobId: job.id, message: error.message });
+    }).then((updatedJob) => {
+      if (!updatedJob) {
+        return;
+      }
+
+      console.info("Completed extraction job", {
+        jobId: updatedJob.id,
+        status: updatedJob.status,
+        aiError: updatedJob.extractionMeta && updatedJob.extractionMeta.aiError ? updatedJob.extractionMeta.aiError : null
+      });
     });
   }, 300);
+}
+
+function reschedulePendingExtractions() {
+  const pendingJobs = listJobs("processing");
+  if (!pendingJobs.length) {
+    return;
+  }
+
+  console.warn("Rescheduling pending extraction jobs on startup", {
+    count: pendingJobs.length,
+    jobIds: pendingJobs.map((job) => job.id)
+  });
+
+  for (const job of pendingJobs) {
+    scheduleExtraction(job);
+  }
 }
 
 function serveStaticFile(res, pathname) {
@@ -384,6 +422,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`QualExtract MVP server running on http://localhost:${PORT}`);
+  reschedulePendingExtractions();
 });
 
 function shutdown() {

@@ -19,6 +19,7 @@ const { resetState, createUploadedJob, hydrateJobForReview } = require("../serve
 const { closeDatabaseForTests } = require("../server/databaseStore");
 
 let serverProcess;
+let startupRecoveryJobId;
 
 function seedBlockedReviewJob() {
   resetState();
@@ -180,6 +181,7 @@ test.before(async () => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
   fs.mkdirSync(tempRoot, { recursive: true });
   seedBlockedReviewJob();
+  startupRecoveryJobId = createUploadedJob("Resume_On_Start.pdf").id;
   closeDatabaseForTests();
 
   serverProcess = spawn(process.execPath, ["server.js"], {
@@ -237,4 +239,22 @@ test("supports structure-first approval through the real HTTP API", async () => 
 
   assert.equal(approvedResponse.item.status, "persisted");
   assert.ok(approvedResponse.item.persistedAt);
+});
+
+test("retries processing jobs that were stranded before server startup", async () => {
+  const timeoutAt = Date.now() + 10_000;
+  let recoveredJob;
+
+  while (Date.now() < timeoutAt) {
+    const response = await fetchJson(`${baseUrl}/api/v1/jobs/${startupRecoveryJobId}`);
+    recoveredJob = response.item;
+    if (recoveredJob.status !== "processing") {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+
+  assert.ok(recoveredJob);
+  assert.equal(recoveredJob.status, "review");
+  assert.equal(recoveredJob.extractionMeta.aiError, "An uploaded PDF artifact is required for AI extraction.");
 });

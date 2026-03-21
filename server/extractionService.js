@@ -1,18 +1,23 @@
 const fs = require("node:fs");
 
-const { getJob, hydrateJobForReview } = require("./jobStore");
+const { getJob, hydrateJobForReview, markExtractionJobStarted } = require("./jobStore");
 const { resolveArtifactPath } = require("./uploadStore");
-const { getAiConfigurationIssues, getAiProviderName, isAiConfigured, getModelName, extractQualificationWithAi } = require("./aiClient");
-let pdfParseConstructor;
+const {
+  analyzePdfWithDocumentIntelligence,
+  getDocumentIntelligenceConfigurationIssues,
+  getDocumentIntelligenceStatus,
+  isDocumentIntelligenceConfigured
+} = require("./documentIntelligenceClient");
+const {
+  getAiConfigurationIssues,
+  getAiProviderName,
+  isAiConfigured,
+  getModelName,
+  getAiRequestTimeoutMs,
+  extractQualificationWithAi
+} = require("./aiClient");
 
-function getPdfParseConstructor() {
-  if (pdfParseConstructor) {
-    return pdfParseConstructor;
-  }
-
-  ({ PDFParse: pdfParseConstructor } = require("pdf-parse"));
-  return pdfParseConstructor;
-}
+const EXTRACTION_TIMEOUT_BUFFER_MS = 15000;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -47,35 +52,31 @@ function resolveArtifact(job) {
   };
 }
 
-async function analyzePdfArtifact(job, artifact) {
+function buildAnalysisFromDocumentIntelligence(job, analysis) {
   const defaultAnalysis = {
     pageCount: job && job.pages ? job.pages.total : 0,
-    sourceTextExcerpt: null
+    sourceTextExcerpt: null,
+    documentIntelligence: null
   };
 
-  if (!artifact) {
+  if (!analysis) {
     return defaultAnalysis;
   }
 
-  let PDFParse;
-  try {
-    PDFParse = getPdfParseConstructor();
-  } catch {
-    return defaultAnalysis;
-  }
-
-  const parser = new PDFParse({ data: artifact.buffer });
-  try {
-    const parsed = await parser.getText();
-    return {
-      pageCount: parsed.total || defaultAnalysis.pageCount,
-      sourceTextExcerpt: String(parsed.text || "").slice(0, 1000) || null
-    };
-  } catch {
-    return defaultAnalysis;
-  } finally {
-    await parser.destroy();
-  }
+  return {
+    pageCount: analysis.pageCount || defaultAnalysis.pageCount,
+    sourceTextExcerpt: String(analysis.content || "").slice(0, 1000) || null,
+    documentIntelligence: {
+      contentFormat: analysis.contentFormat || "markdown",
+      model: analysis.modelId || getDocumentIntelligenceStatus().model,
+      pageCount: analysis.pageCount || defaultAnalysis.pageCount,
+      paragraphCount: analysis.paragraphCount || 0,
+      tableCount: analysis.tableCount || 0,
+      sectionCount: analysis.sectionCount || 0,
+      figureCount: analysis.figureCount || 0,
+      keyValuePairCount: analysis.keyValuePairCount || 0
+    }
+  };
 }
 
 function buildExtractionContext(job, analysis) {
@@ -87,8 +88,40 @@ function buildExtractionContext(job, analysis) {
   };
 }
 
+function getExtractionJobTimeoutMs() {
+  return getAiRequestTimeoutMs() + EXTRACTION_TIMEOUT_BUFFER_MS;
+}
+
+function withTimeout(promise, timeoutMs, timeoutMessage) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function buildTimeoutAnalysis(job) {
+  return {
+    pageCount: job && job.pages ? job.pages.total : 0,
+    sourceTextExcerpt: job && job.sourceTextExcerpt ? job.sourceTextExcerpt : null,
+    documentIntelligence: null
+  };
+}
+
 function buildPendingDraft(job, analysis, extras) {
   const context = buildExtractionContext(job, analysis);
+  const documentIntelligence = analysis && analysis.documentIntelligence ? analysis.documentIntelligence : null;
   return {
     qualificationCode: "Pending",
     confidence: 0,
@@ -103,7 +136,8 @@ function buildPendingDraft(job, analysis, extras) {
       model: getModelName(),
       pageCount: context.pages.total,
       extractedAt: new Date().toISOString(),
-      inputMode: "pdf-file",
+      inputMode: "document-intelligence-markdown",
+      documentIntelligence,
       ...(extras || {})
     }
   };
@@ -111,6 +145,7 @@ function buildPendingDraft(job, analysis, extras) {
 
 function mergeAiDraft(aiDraft, job, analysis) {
   const context = buildExtractionContext(job, analysis);
+  const documentIntelligence = analysis && analysis.documentIntelligence ? analysis.documentIntelligence : null;
   return {
     ...aiDraft,
     pages: aiDraft.pages || context.pages,
@@ -122,39 +157,45 @@ function mergeAiDraft(aiDraft, job, analysis) {
       model: getModelName(),
       pageCount: context.pages.total,
       extractedAt: new Date().toISOString(),
-      inputMode: "pdf-file"
+      inputMode: "document-intelligence-markdown",
+      documentIntelligence
     }
   };
 }
 
 async function createExtractionDraft(job) {
   const artifact = resolveArtifact(job);
-  const analysis = await analyzePdfArtifact(job, artifact);
-  const configurationIssues = getAiConfigurationIssues();
+  const aiConfigurationIssues = getAiConfigurationIssues();
+  const documentIntelligenceIssues = getDocumentIntelligenceConfigurationIssues();
 
   if (!artifact) {
-    return buildPendingDraft(job, analysis, {
+    return buildPendingDraft(job, buildAnalysisFromDocumentIntelligence(job, null), {
       requestedProvider: getAiProviderName(),
       aiError: "An uploaded PDF artifact is required for AI extraction."
     });
   }
 
-  if (!isAiConfigured()) {
-    return buildPendingDraft(job, analysis, {
+  if (!isAiConfigured() || !isDocumentIntelligenceConfigured()) {
+    return buildPendingDraft(job, buildAnalysisFromDocumentIntelligence(job, null), {
       requestedProvider: getAiProviderName(),
-      aiError: configurationIssues.join(" ")
+      aiError: [...aiConfigurationIssues, ...documentIntelligenceIssues].join(" ")
     });
   }
 
   try {
+    const documentAnalysis = await analyzePdfWithDocumentIntelligence({
+      fileName: artifact.fileName,
+      pdfBuffer: artifact.buffer
+    });
+    const analysis = buildAnalysisFromDocumentIntelligence(job, documentAnalysis);
     const aiDraft = await extractQualificationWithAi({
       fileName: job.fileName,
-      pdfBuffer: artifact.buffer,
+      documentAnalysis,
       extractionContext: buildExtractionContext(job, analysis)
     });
     return mergeAiDraft(aiDraft, job, analysis);
   } catch (error) {
-    return buildPendingDraft(job, analysis, {
+    return buildPendingDraft(job, buildAnalysisFromDocumentIntelligence(job, null), {
       aiError: error.message
     });
   }
@@ -165,11 +206,29 @@ async function processExtractionJob(jobId) {
   if (!job) {
     return null;
   }
-  const draft = await createExtractionDraft(job);
+
+  const startedJob = markExtractionJobStarted(jobId) || getJob(jobId) || job;
+  let draft;
+
+  try {
+    const timeoutMs = getExtractionJobTimeoutMs();
+    draft = await withTimeout(
+      createExtractionDraft(startedJob),
+      timeoutMs,
+      `Background extraction worker timed out after ${timeoutMs}ms.`
+    );
+  } catch (error) {
+    draft = buildPendingDraft(startedJob, buildTimeoutAnalysis(startedJob), {
+      aiError: error.message,
+      workerTimedOut: /timed out/i.test(error.message)
+    });
+  }
+
   return hydrateJobForReview(jobId, draft);
 }
 
 module.exports = {
   createExtractionDraft,
-  processExtractionJob
+  processExtractionJob,
+  getExtractionJobTimeoutMs
 };

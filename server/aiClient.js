@@ -5,6 +5,7 @@ const { AzureOpenAI } = require("openai");
 const { SpanStatusCode } = require("@opentelemetry/api");
 const { getTracer, initializeTracing } = require("./observability");
 const { AUTHORITATIVE_CONTRACT_VERSION, normalizeAuthoritativeAiPayload } = require("./aiDraftNormalizer");
+const { getDocumentIntelligenceStatus } = require("./documentIntelligenceClient");
 
 const promptPath = path.join(__dirname, "..", "prompts", "qualification-extractor.md");
 const schemaPath = path.join(__dirname, "..", "templates", "qualification-extraction-authoritative-schema.json");
@@ -13,10 +14,61 @@ const tracer = getTracer();
 let client;
 let clientCacheKey;
 
+const DEFAULT_AI_TIMEOUT_MS = 120000;
+
+function containsUnresolvedKeyVaultReference(value) {
+  return /^@microsoft\.keyvault\(/i.test(String(value || "").trim());
+}
+
+function trimTrailingSlashes(value) {
+  return String(value || "").replace(/\/+$/, "");
+}
+
+function resolveFoundryBaseURL(config) {
+  if (config.baseURL) {
+    return `${trimTrailingSlashes(config.baseURL)}/`;
+  }
+
+  const normalizedEndpoint = trimTrailingSlashes(config.endpoint).replace(/\/openai(?:\/v1)?$/i, "");
+  if (!normalizedEndpoint) {
+    return "";
+  }
+
+  return `${normalizedEndpoint}/openai/v1/`;
+}
+
+function formatAiErrorMessage(provider, model, apiVersion, error) {
+  const message = error && error.message ? error.message : String(error || "Unknown AI provider error.");
+
+  if (provider !== "foundry") {
+    return message;
+  }
+
+  if (/404|resource not found/i.test(message)) {
+    return `${message} Verify that QUAL_AI_MODEL matches the Azure OpenAI deployment name exactly and that the app is using the Responses API route with FOUNDRY_API_VERSION=${apiVersion || "<missing>"}.`;
+  }
+
+  return message;
+}
+
 function normalizeProviderName(value) {
   return String(value || "")
     .trim()
     .toLowerCase();
+}
+
+function getAiRequestTimeoutMs() {
+  const rawValue = process.env.QUAL_AI_TIMEOUT_MS;
+  if (!rawValue) {
+    return DEFAULT_AI_TIMEOUT_MS;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_AI_TIMEOUT_MS;
+  }
+
+  return parsed;
 }
 
 function resolveProviderName() {
@@ -53,13 +105,17 @@ function getProviderConfig() {
 function getAiConfigurationIssues() {
   const config = getProviderConfig();
   const issues = [];
+  const configuredTimeout = process.env.QUAL_AI_TIMEOUT_MS;
 
   if (!config.apiKey) {
     issues.push(`${config.provider.toUpperCase()} API key is missing.`);
+  } else if (containsUnresolvedKeyVaultReference(config.apiKey)) {
+    const settingName = config.provider === "foundry" ? "FOUNDRY_API_KEY" : "OPENAI_API_KEY";
+    issues.push(`${settingName} contains an unresolved Key Vault reference. Restart the app or fix the web app identity and Key Vault permissions.`);
   }
 
   if (config.provider === "foundry") {
-    if (!config.apiVersion) {
+    if (config.endpoint && !config.apiVersion) {
       issues.push("FOUNDRY_API_VERSION is required when QUAL_AI_PROVIDER=foundry.");
     }
     if (!config.baseURL && !config.endpoint) {
@@ -71,8 +127,21 @@ function getAiConfigurationIssues() {
     if (config.baseURL && !/^https:\/\//i.test(config.baseURL)) {
       issues.push("FOUNDRY_BASE_URL must start with https://.");
     }
+    if (config.baseURL && !/\/openai\/v1\/?$/i.test(config.baseURL)) {
+      issues.push("FOUNDRY_BASE_URL must be the full OpenAI-compatible base URL ending in /openai/v1.");
+    }
     if (config.endpoint && !/^https:\/\//i.test(config.endpoint)) {
       issues.push("FOUNDRY_ENDPOINT must start with https://.");
+    }
+    if (config.endpoint && /\/openai(?:\/v1)?\/?$/i.test(config.endpoint)) {
+      issues.push("FOUNDRY_ENDPOINT must be the resource endpoint only, without /openai or /v1.");
+    }
+  }
+
+  if (configuredTimeout) {
+    const parsedTimeout = Number.parseInt(configuredTimeout, 10);
+    if (!Number.isFinite(parsedTimeout) || parsedTimeout <= 0) {
+      issues.push("QUAL_AI_TIMEOUT_MS must be a positive integer when provided.");
     }
   }
 
@@ -82,17 +151,19 @@ function getAiConfigurationIssues() {
 function getAiStatus() {
   const config = getProviderConfig();
   const issues = getAiConfigurationIssues();
+  const documentIntelligence = getDocumentIntelligenceStatus();
   return {
     provider: config.provider,
-    configured: issues.length === 0,
+    configured: issues.length === 0 && documentIntelligence.configured,
     model: getModelName(),
-    issues,
+    issues: [...issues, ...documentIntelligence.issues],
     capabilities: {
       apiKeyConfigured: Boolean(config.apiKey),
       baseUrlConfigured: Boolean(config.baseURL),
       endpointConfigured: Boolean(config.endpoint),
       apiVersionConfigured: Boolean(config.apiVersion)
-    }
+    },
+    documentIntelligence
   };
 }
 
@@ -110,26 +181,35 @@ function getModelName() {
 
 function getClient() {
   const config = getProviderConfig();
-  const cacheKey = `${config.provider}|${config.apiKey}|${config.baseURL}|${config.endpoint}|${config.apiVersion}`;
+  const timeout = getAiRequestTimeoutMs();
+  const cacheKey = `${config.provider}|${config.apiKey}|${config.baseURL}|${config.endpoint}|${config.apiVersion}|${timeout}`;
   if (client && clientCacheKey === cacheKey) {
     return client;
   }
 
   initializeTracing();
   if (config.provider === "foundry") {
-    client = new AzureOpenAI({
-      apiKey: config.apiKey,
-      apiVersion: config.apiVersion,
-      baseURL: config.baseURL || undefined,
-      endpoint: config.endpoint || undefined,
-      timeout: 15000,
-      maxRetries: 0
-    });
+    if (config.endpoint) {
+      client = new AzureOpenAI({
+        apiKey: config.apiKey,
+        apiVersion: config.apiVersion,
+        endpoint: trimTrailingSlashes(config.endpoint),
+        timeout,
+        maxRetries: 0
+      });
+    } else {
+      client = new OpenAI({
+        apiKey: config.apiKey,
+        baseURL: resolveFoundryBaseURL(config) || undefined,
+        timeout,
+        maxRetries: 0
+      });
+    }
   } else {
     client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseURL || undefined,
-      timeout: 15000,
+      timeout,
       maxRetries: 0
     });
   }
@@ -180,16 +260,35 @@ function getResponseText(response) {
   return "";
 }
 
-function buildPdfInput(fileName, pdfBuffer) {
-  if (!Buffer.isBuffer(pdfBuffer) || !pdfBuffer.length) {
-    throw new Error("PDF input is required for AI extraction.");
+function buildDocumentAnalysisInputs(fileName, documentAnalysis) {
+  if (!documentAnalysis || typeof documentAnalysis !== "object") {
+    throw new Error("Document Intelligence analysis is required for AI extraction.");
   }
 
-  return {
-    type: "input_file",
-    filename: fileName || "qualification.pdf",
-    file_data: pdfBuffer.toString("base64")
-  };
+  if (!documentAnalysis.content || typeof documentAnalysis.content !== "string") {
+    throw new Error("Document Intelligence analysis did not provide extracted content.");
+  }
+
+  return [
+    {
+      type: "input_text",
+      text: JSON.stringify({
+        fileName,
+        sourceDocument: "Azure AI Document Intelligence layout analysis",
+        contentFormat: documentAnalysis.contentFormat || "markdown",
+        pageCount: documentAnalysis.pageCount || 0,
+        paragraphCount: documentAnalysis.paragraphCount || 0,
+        tableCount: documentAnalysis.tableCount || 0,
+        sectionCount: documentAnalysis.sectionCount || 0,
+        figureCount: documentAnalysis.figureCount || 0,
+        keyValuePairCount: documentAnalysis.keyValuePairCount || 0
+      })
+    },
+    {
+      type: "input_text",
+      text: `Document Intelligence extracted content:\n\n${documentAnalysis.content}`
+    }
+  ];
 }
 
 function validateAiPayload(payload) {
@@ -231,19 +330,13 @@ async function runAiConnectivityCheck(options = {}) {
     span.setAttribute("qualextract.model", status.model);
 
     try {
-      const completion = await clientInstance.chat.completions.create({
+      const response = await clientInstance.responses.create({
         model: status.model,
-        temperature: 0,
-        max_tokens: 8,
-        messages: [
-          { role: "system", content: "Reply with OK." },
-          { role: "user", content: "ping" }
-        ]
+        max_output_tokens: 16,
+        input: "Reply with OK."
       });
 
-      const content = normalizeContent(completion.choices[0] && completion.choices[0].message
-        ? completion.choices[0].message.content
-        : "").trim();
+      const content = normalizeContent(getResponseText(response)).trim();
 
       span.setStatus({ code: SpanStatusCode.OK });
       return {
@@ -256,14 +349,15 @@ async function runAiConnectivityCheck(options = {}) {
       };
     } catch (error) {
       span.recordException(error);
-      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      const message = formatAiErrorMessage(status.provider, status.model, getProviderConfig().apiVersion, error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message });
       return {
         ok: false,
         provider: status.provider,
         model: status.model,
         checkedAt,
-        message: error.message,
-        issues: [error.message]
+        message,
+        issues: [message]
       };
     } finally {
       span.end();
@@ -271,39 +365,31 @@ async function runAiConnectivityCheck(options = {}) {
   });
 }
 
-async function extractQualificationWithAi({ fileName, pdfBuffer, extractionContext, client: injectedClient }) {
+async function extractQualificationWithAi({ fileName, documentAnalysis, extractionContext, client: injectedClient }) {
   return tracer.startActiveSpan("qualextract.ai.extract", async (span) => {
     const prompt = readPrompt();
     const schema = readSchema();
     const model = getModelName();
     const provider = getAiProviderName();
     const clientInstance = injectedClient || getClient();
+    const content = buildDocumentAnalysisInputs(fileName, documentAnalysis);
 
     span.setAttribute("qualextract.provider", provider);
     span.setAttribute("qualextract.model", model);
     span.setAttribute("qualextract.file_name", fileName);
-    span.setAttribute("qualextract.input_bytes", Buffer.isBuffer(pdfBuffer) ? pdfBuffer.length : 0);
+    span.setAttribute("qualextract.document_intelligence.page_count", documentAnalysis && documentAnalysis.pageCount ? documentAnalysis.pageCount : 0);
+    span.setAttribute("qualextract.document_intelligence.table_count", documentAnalysis && documentAnalysis.tableCount ? documentAnalysis.tableCount : 0);
 
     try {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           const response = await clientInstance.responses.create({
             model,
-            temperature: 0.1,
             instructions: prompt,
             input: [
               {
                 role: "user",
-                content: [
-                  buildPdfInput(fileName, pdfBuffer),
-                  {
-                    type: "input_text",
-                    text: JSON.stringify({
-                      fileName,
-                      sourceDocument: "attached PDF file"
-                    })
-                  }
-                ]
+                content
               }
             ],
             text: {
@@ -316,8 +402,8 @@ async function extractQualificationWithAi({ fileName, pdfBuffer, extractionConte
             },
           });
 
-          const content = normalizeContent(getResponseText(response));
-          const payload = validateAiPayload(JSON.parse(content));
+          const responseText = normalizeContent(getResponseText(response));
+          const payload = validateAiPayload(JSON.parse(responseText));
           const normalizedDraft = normalizeAuthoritativeAiPayload(payload, extractionContext);
           span.setAttribute(
             "qualextract.authoritative_qualification_count",
@@ -328,7 +414,10 @@ async function extractQualificationWithAi({ fileName, pdfBuffer, extractionConte
           return normalizedDraft;
         } catch (error) {
           if (attempt === 3) {
-            throw error;
+            throw new Error(
+              formatAiErrorMessage(provider, model, getProviderConfig().apiVersion, error),
+              { cause: error }
+            );
           }
           await sleep(250 * attempt);
         }
@@ -344,6 +433,7 @@ async function extractQualificationWithAi({ fileName, pdfBuffer, extractionConte
 }
 
 module.exports = {
+  getAiRequestTimeoutMs,
   getAiStatus,
   getAiConfigurationIssues,
   getAiProviderName,

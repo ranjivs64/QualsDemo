@@ -366,6 +366,23 @@ function hydrateJobForReview(jobId, draftOrFileName) {
   });
 }
 
+function markExtractionJobStarted(jobId) {
+  return updateJob(jobId, (job) => {
+    if (job.status !== "processing") {
+      return;
+    }
+
+    job.extractionMeta = {
+      ...(job.extractionMeta || {}),
+      workerStartedAt: formatTimestamp(),
+      workerAttempt: job.attempts,
+      workerStatus: "running"
+    };
+    job.updatedAt = formatTimestamp();
+    synchronizeJobState(job);
+  });
+}
+
 function findNodeById(node, nodeId) {
   if (!node) {
     return null;
@@ -510,6 +527,7 @@ module.exports = {
   getJob,
   createUploadedJob,
   hydrateJobForReview,
+  markExtractionJobStarted,
   updateNodeField,
   verifyNode,
   updateApprovalOverride,

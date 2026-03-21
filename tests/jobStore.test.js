@@ -80,7 +80,7 @@ function createReviewDraftFixture() {
     extractionMeta: {
       provider: "openai",
       model: "gpt-5.1-2026-01-15",
-      inputMode: "pdf-file"
+      inputMode: "document-intelligence-markdown"
     },
     qualification: {
       id: "qualification-draft",
@@ -233,7 +233,7 @@ test("processExtractionJob does not create heuristic metadata without an uploade
   const hydrated = await processExtractionJob(created.id);
   assert.equal(hydrated.status, "review");
   assert.equal(hydrated.extractionMeta.provider, "openai");
-  assert.equal(hydrated.extractionMeta.inputMode, "pdf-file");
+  assert.equal(hydrated.extractionMeta.inputMode, "document-intelligence-markdown");
   assert.equal(hydrated.extractionMeta.aiError, "An uploaded PDF artifact is required for AI extraction.");
   assert.equal(hydrated.qualifications.length, 0);
   assert.equal(hydrated.qualification, null);

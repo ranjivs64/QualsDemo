@@ -1,0 +1,409 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "9807551926786906109"
+    }
+  },
+  "parameters": {
+    "projectName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 20,
+      "metadata": {
+        "description": "Project name used in resource naming."
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "allowedValues": [
+        "dev",
+        "staging",
+        "prod"
+      ],
+      "metadata": {
+        "description": "Deployment environment."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources."
+      }
+    },
+    "appServiceSkuName": {
+      "type": "string",
+      "defaultValue": "B1",
+      "allowedValues": [
+        "B1",
+        "S1",
+        "P1v3"
+      ],
+      "metadata": {
+        "description": "App Service plan SKU name."
+      }
+    },
+    "foundryApiVersion": {
+      "type": "string",
+      "defaultValue": "2025-03-01-preview",
+      "metadata": {
+        "description": "Azure OpenAI deployment API version used by the application."
+      }
+    },
+    "documentIntelligenceApiVersion": {
+      "type": "string",
+      "defaultValue": "2024-11-30",
+      "metadata": {
+        "description": "Azure AI Document Intelligence API version used by the application."
+      }
+    },
+    "documentIntelligenceModel": {
+      "type": "string",
+      "defaultValue": "prebuilt-layout",
+      "metadata": {
+        "description": "Azure AI Document Intelligence model used by the application."
+      }
+    },
+    "documentIntelligenceOutputFormat": {
+      "type": "string",
+      "defaultValue": "markdown",
+      "allowedValues": [
+        "markdown",
+        "text"
+      ],
+      "metadata": {
+        "description": "Azure AI Document Intelligence output format used by the application."
+      }
+    },
+    "documentIntelligenceApiKeySecretName": {
+      "type": "string",
+      "defaultValue": "document-intelligence-api-key",
+      "metadata": {
+        "description": "Key Vault secret name that stores the Document Intelligence API key."
+      }
+    },
+    "foundryModel": {
+      "type": "string",
+      "defaultValue": "gpt-5",
+      "metadata": {
+        "description": "Azure OpenAI model or deployment name used by the application."
+      }
+    },
+    "foundryModelVersion": {
+      "type": "string",
+      "defaultValue": "2025-08-07",
+      "metadata": {
+        "description": "Azure OpenAI model version to deploy."
+      }
+    },
+    "aiDeploymentSkuName": {
+      "type": "string",
+      "defaultValue": "GlobalStandard",
+      "metadata": {
+        "description": "Azure OpenAI deployment SKU name."
+      }
+    },
+    "aiDeploymentCapacity": {
+      "type": "int",
+      "defaultValue": 10,
+      "minValue": 1,
+      "metadata": {
+        "description": "Azure OpenAI deployment capacity."
+      }
+    },
+    "foundryApiKeySecretName": {
+      "type": "string",
+      "defaultValue": "foundry-api-key",
+      "metadata": {
+        "description": "Key Vault secret name that stores the Foundry API key."
+      }
+    },
+    "nodeEnvironment": {
+      "type": "string",
+      "defaultValue": "production",
+      "allowedValues": [
+        "production",
+        "staging"
+      ],
+      "metadata": {
+        "description": "Node environment for the application."
+      }
+    }
+  },
+  "variables": {
+    "normalizedProjectName": "[toLower(replace(replace(parameters('projectName'), '-', ''), '_', ''))]",
+    "resourceSuffix": "[uniqueString(resourceGroup().id, parameters('projectName'), parameters('environmentName'))]",
+    "webAppName": "[toLower(format('app-{0}-{1}-{2}', parameters('projectName'), parameters('environmentName'), take(variables('resourceSuffix'), 6)))]",
+    "appServicePlanName": "[format('asp-{0}-{1}', parameters('projectName'), parameters('environmentName'))]",
+    "appInsightsName": "[format('appi-{0}-{1}', parameters('projectName'), parameters('environmentName'))]",
+    "keyVaultName": "[take(format('kv{0}{1}{2}', variables('normalizedProjectName'), parameters('environmentName'), variables('resourceSuffix')), 24)]",
+    "openAiAccountName": "[take(format('aoai{0}{1}{2}', variables('normalizedProjectName'), parameters('environmentName'), variables('resourceSuffix')), 24)]",
+    "documentIntelligenceAccountName": "[take(format('di{0}{1}{2}', variables('normalizedProjectName'), parameters('environmentName'), variables('resourceSuffix')), 24)]",
+    "openAiDeploymentName": "[take(replace(toLower(parameters('foundryModel')), '.', '-'), 64)]",
+    "commonTags": {
+      "Environment": "[parameters('environmentName')]",
+      "Project": "[parameters('projectName')]",
+      "ManagedBy": "Bicep"
+    },
+    "appServiceSkuTier": "[if(equals(parameters('appServiceSkuName'), 'P1v3'), 'PremiumV3', if(equals(parameters('appServiceSkuName'), 'S1'), 'Standard', 'Basic'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "Application_Type": "web",
+        "Flow_Type": "Bluefield",
+        "Request_Source": "rest"
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('keyVaultName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "accessPolicies": [],
+        "tenantId": "[tenant().tenantId]",
+        "enableRbacAuthorization": false,
+        "enabledForDeployment": false,
+        "enabledForDiskEncryption": false,
+        "enabledForTemplateDeployment": false,
+        "publicNetworkAccess": "Enabled",
+        "softDeleteRetentionInDays": 7,
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2024-10-01",
+      "name": "[variables('openAiAccountName')]",
+      "location": "[parameters('location')]",
+      "kind": "OpenAI",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "[variables('openAiAccountName')]",
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2024-10-01",
+      "name": "[variables('documentIntelligenceAccountName')]",
+      "location": "[parameters('location')]",
+      "kind": "FormRecognizer",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "customSubDomainName": "[variables('documentIntelligenceAccountName')]",
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "apiVersion": "2024-10-01",
+      "name": "[format('{0}/{1}', variables('openAiAccountName'), variables('openAiDeploymentName'))]",
+      "sku": {
+        "name": "[parameters('aiDeploymentSkuName')]",
+        "capacity": "[parameters('aiDeploymentCapacity')]"
+      },
+      "properties": {
+        "model": {
+          "format": "OpenAI",
+          "name": "[parameters('foundryModel')]",
+          "version": "[parameters('foundryModelVersion')]"
+        },
+        "versionUpgradeOption": "OnceNewDefaultVersionAvailable"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('openAiAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', variables('keyVaultName'), parameters('foundryApiKeySecretName'))]",
+      "properties": {
+        "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiAccountName')), '2024-10-01').key1]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('openAiAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', variables('keyVaultName'), parameters('documentIntelligenceApiKeySecretName'))]",
+      "properties": {
+        "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', variables('documentIntelligenceAccountName')), '2024-10-01').key1]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('documentIntelligenceAccountName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "kind": "linux",
+      "tags": "[variables('commonTags')]",
+      "sku": {
+        "name": "[parameters('appServiceSkuName')]",
+        "tier": "[variables('appServiceSkuTier')]",
+        "size": "[parameters('appServiceSkuName')]",
+        "capacity": 1
+      },
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('webAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "alwaysOn": "[not(equals(parameters('environmentName'), 'dev'))]",
+          "ftpsState": "Disabled",
+          "healthCheckPath": "/api/v1/health",
+          "http20Enabled": true,
+          "linuxFxVersion": "NODE|24-lts",
+          "minTlsVersion": "1.2"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), parameters('documentIntelligenceApiKeySecretName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), parameters('foundryApiKeySecretName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/accessPolicies",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', variables('keyVaultName'), 'add')]",
+      "properties": {
+        "accessPolicies": [
+          {
+            "tenantId": "[tenant().tenantId]",
+            "objectId": "[reference(resourceId('Microsoft.Web/sites', variables('webAppName')), '2023-12-01', 'full').identity.principalId]",
+            "permissions": {
+              "secrets": [
+                "get"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2023-12-01",
+      "name": "[format('{0}/{1}', variables('webAppName'), 'appsettings')]",
+      "properties": {
+        "APPLICATIONINSIGHTS_CONNECTION_STRING": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]",
+        "NODE_ENV": "[parameters('nodeEnvironment')]",
+        "QUAL_AI_PROVIDER": "foundry",
+        "DOCUMENT_INTELLIGENCE_ENDPOINT": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('documentIntelligenceAccountName')), '2024-10-01').endpoint]",
+        "DOCUMENT_INTELLIGENCE_API_KEY": "[format('@Microsoft.KeyVault(VaultName={0};SecretName={1})', variables('keyVaultName'), parameters('documentIntelligenceApiKeySecretName'))]",
+        "DOCUMENT_INTELLIGENCE_API_VERSION": "[parameters('documentIntelligenceApiVersion')]",
+        "DOCUMENT_INTELLIGENCE_MODEL": "[parameters('documentIntelligenceModel')]",
+        "DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT": "[parameters('documentIntelligenceOutputFormat')]",
+        "DOCUMENT_INTELLIGENCE_TIMEOUT_MS": "120000",
+        "FOUNDRY_ENDPOINT": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiAccountName')), '2024-10-01').endpoint]",
+        "FOUNDRY_API_VERSION": "[parameters('foundryApiVersion')]",
+        "QUAL_AI_MODEL": "[variables('openAiDeploymentName')]",
+        "FOUNDRY_API_KEY": "[format('@Microsoft.KeyVault(VaultName={0};SecretName={1})', variables('keyVaultName'), parameters('foundryApiKeySecretName'))]",
+        "ENABLE_ORYX_BUILD": "false",
+        "QUAL_DB_PATH": "/home/site/data/qualextract.sqlite",
+        "QUAL_UPLOADS_DIR": "/home/site/uploads",
+        "SCM_DO_BUILD_DURING_DEPLOYMENT": "false",
+        "WEBSITE_RUN_FROM_PACKAGE": "1"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('documentIntelligenceAccountName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), parameters('documentIntelligenceApiKeySecretName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', variables('keyVaultName'), parameters('foundryApiKeySecretName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults/accessPolicies', variables('keyVaultName'), 'add')]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('openAiAccountName'))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/deployments', variables('openAiAccountName'), variables('openAiDeploymentName'))]",
+        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "webAppName": {
+      "type": "string",
+      "value": "[variables('webAppName')]"
+    },
+    "webAppHostName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', variables('webAppName')), '2023-12-01').defaultHostName]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[variables('keyVaultName')]"
+    },
+    "applicationInsightsName": {
+      "type": "string",
+      "value": "[variables('appInsightsName')]"
+    },
+    "appServicePlanName": {
+      "type": "string",
+      "value": "[variables('appServicePlanName')]"
+    },
+    "openAiAccountName": {
+      "type": "string",
+      "value": "[variables('openAiAccountName')]"
+    },
+    "openAiEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiAccountName')), '2024-10-01').endpoint]"
+    },
+    "openAiDeploymentName": {
+      "type": "string",
+      "value": "[variables('openAiDeploymentName')]"
+    },
+    "documentIntelligenceAccountName": {
+      "type": "string",
+      "value": "[variables('documentIntelligenceAccountName')]"
+    },
+    "documentIntelligenceEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', variables('documentIntelligenceAccountName')), '2024-10-01').endpoint]"
+    }
+  }
+}
