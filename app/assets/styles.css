@@ -26,6 +26,9 @@
   --radius-sm: 8px;
   --max-width: 1520px;
   --focus: 0 0 0 3px rgba(0, 91, 211, 0.28);
+  --heading: #212529;               /* Pearson heading charcoal */
+  --info-bg: #ede9ff;               /* Pearson light lavender — AI ready state */
+  --info-border: rgba(107, 47, 186, 0.2);
 }
 
 * {
@@ -278,8 +281,8 @@ select:focus-visible {
 }
 
 .status-banner-success {
-  background: var(--success-bg);
-  border-color: rgba(22, 101, 52, 0.18);
+  background: var(--info-bg);
+  border-color: var(--info-border);
 }
 
 .status-banner-warning {
@@ -470,7 +473,7 @@ select:focus-visible {
 .badge-neutral {
   background: var(--neutral-bg);
   color: var(--text-muted);
-  border-color: rgba(184, 159, 131, 0.28);
+  border-color: var(--border);
 }
 
 .badge-success {
@@ -639,7 +642,7 @@ select:focus-visible {
   min-height: 560px;
   padding: 28px;
   overflow: hidden;
-  background: linear-gradient(180deg, #fffefb, #fbf5ec);
+  background: linear-gradient(180deg, #fafbfe, #eef1fa);
 }
 
 .source-focus {
@@ -789,7 +792,7 @@ select:focus-visible {
 
 .tree-children {
   padding-left: 18px;
-  border-left: 2px solid rgba(184, 159, 131, 0.24);
+  border-left: 2px solid rgba(0, 91, 211, 0.15);
 }
 
 .tree-children.is-collapsed {
@@ -1682,7 +1685,7 @@ select {
   margin: 0 0 2px;
   font-size: 1.0rem;
   font-weight: 800;
-  color: var(--text);
+  color: var(--heading);
   line-height: 1.2;
 }
 
@@ -1750,4 +1753,23 @@ select {
 /* PDF button in spec summary */
 .spec-pdf-action {
   margin-top: 12px;
+}
+
+/* Structural headings: Pearson charcoal */
+.hero-panel h2,
+.review-header h2,
+#history-title,
+.panel-header h3,
+.panel-header h2,
+.dropzone h4,
+.job-name,
+.tree-title,
+.empty-state h4,
+.inspector-content h4,
+.approval-card h4,
+.source-sheet h4,
+.validation-summary-head h4,
+.document-page h4,
+.document-emphasis {
+  color: var(--heading);
 }
