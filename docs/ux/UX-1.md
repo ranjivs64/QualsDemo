@@ -26,7 +26,7 @@ inputs:
 
 **Feature**: #1  
 **Epic**: #1  
-**Status**: Draft  
+**Status**: Accepted  
 **Designer**: UX Designer Agent  
 **Date**: 2026-03-16  
 **Related PRD**: [PRD-1.md](../artifacts/prd/PRD-1.md)
@@ -117,7 +117,7 @@ A web-based human-in-the-loop (HITL) interface allowing users to upload qualific
 
 ### Specification Summary Rail
 - **Placement**: Sticky top section in the extracted-structure pane.
-- **Contents**: Qualification count, shared-unit count, unit count, learning outcome count, assessment-criteria count, and persistence readiness.
+- **Contents**: Qualification count, shared-unit count, unit count, learning outcome count, assessment-criteria count, and approval availability.
 - **Behavior**: The summary gives structural context at a glance and stays visible while the reviewer navigates the hierarchy.
 
 ### Confidence Badges
@@ -129,7 +129,7 @@ A web-based human-in-the-loop (HITL) interface allowing users to upload qualific
 - **Primary Action**: Approve and Persist.
 - **Secondary Actions**: Reject, Reprocess, Save Draft.
 - **Readiness Pattern**: Approval becomes available once extraction has produced at least one qualification structure for review.
-- **Audit Context**: The panel shows qualification, shared-unit, unit, outcome, and criteria counts alongside persistence readiness.
+- **Audit Context**: The panel shows qualification, shared-unit, unit, outcome, and criteria counts alongside the current approval state.
 
 ---
 
@@ -177,4 +177,4 @@ HTML/CSS prototypes have been created using Tailwind CSS with glassmorphism and 
 - The review workspace should lazy-load the PDF bounds to prevent heavy DOM rendering if documents are 100+ pages.
 - When an analyst edits a node, flag it so the system stops showing "Low Confidence" and overrides it with "User Verified".
 - Shared-unit edits should prompt the reviewer to choose whether the change applies to the canonical shared unit or only to one qualification-specific membership.
-- Structure summary counts should refresh after edits and reprocess actions so persistence readiness stays accurate.
+- Structure summary counts should refresh after edits and reprocess actions so approval availability stays accurate.

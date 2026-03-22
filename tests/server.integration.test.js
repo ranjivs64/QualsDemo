@@ -217,10 +217,17 @@ test("serves the updated live review workspace shell", async () => {
   const html = await response.text();
 
   assert.equal(response.status, 200);
-  assert.match(html, /Qualification review workspace/);
+  assert.match(html, /UK Qualification Extraction AI/);
   assert.match(html, /id="validationRail"/);
   assert.match(html, /id="qualificationTabs"/);
-  assert.match(html, /id="approvalPanel"/);
+  assert.match(html, /id="inspectorContent"/);
+});
+
+test("serves svg assets with an image content type", async () => {
+  const response = await fetch(`${baseUrl}/assets/pearson-logo.svg`);
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") || "", /^image\/svg\+xml\b/);
 });
 
 test("supports structure-first approval through the real HTTP API", async () => {

@@ -62,10 +62,10 @@ If Document Intelligence or the LLM credentials are not configured, the app stil
 
 - Upload a PDF and create a real local extraction job through the API
 - Parse uploaded PDFs and create a DB-backed extraction job
-- Run an AI-backed structured extraction flow when OpenAI credentials are configured
+- Run an AI-backed structured extraction flow when Document Intelligence and an LLM provider are configured
 - Review extracted qualification hierarchy
-- Inspect and edit the low-confidence Unit 3 GLH field
-- Verify the field and transition the job to ready-to-persist
+- Inspect and edit extracted nodes in the review hierarchy
+- Verify structure and approve once at least one qualification tree is reviewable
 - Approve and persist the job into history
 - Read normalized persisted qualification records from the API
 - Reprocess a job to simulate another extraction attempt

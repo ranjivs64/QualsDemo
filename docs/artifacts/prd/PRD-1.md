@@ -54,7 +54,7 @@ inputs:
 ## 1. Problem Statement
 
 ### What problem are we solving?
-Qualification specification PDFs contain the structure needed to create qualification, unit, grading, grouping, learning-outcome, assessment-criteria, and ruleset records, but that structure is trapped in long-form documents and must be interpreted manually. The updated extraction prompt also requires the system to handle multiple qualifications in one document, shared units reused across qualifications, and qualification-rule validation before approval. The goal is to extract the qualification structure defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md), present the extracted structure in a reviewable visualization, and only persist the approved structure through an API.
+Qualification specification PDFs contain the structure needed to create qualification, unit, grading, grouping, learning-outcome, assessment-criteria, and ruleset records, but that structure is trapped in long-form documents and must be interpreted manually. The updated extraction prompt also requires the system to handle multiple qualifications in one document, shared units reused across qualifications, and qualification-rule validation before approval. The goal is to extract the qualification structure defined in [QualStructure.md](../../../QualStructure.md), present the extracted structure in a reviewable visualization, and only persist the approved structure through an API.
 
 ### Why is this important?
 Manual extraction is slow, error-prone, and inconsistent across operators. The risk is highest when one PDF contains several related qualifications, overlapping unit catalogs, or detailed grading and assessment text that must be preserved for downstream marking and review. A review-first extraction workflow reduces turnaround time, improves consistency, and creates a governed path from PDF source to structured qualification data.
@@ -153,7 +153,7 @@ Teams will continue to rely on manual interpretation of PDFs, causing long lead 
 ### Chosen Approach Rationale
 Use a hybrid AI-assisted extraction workflow:
 1. A layout-aware document extraction service performs OCR and layout understanding.
-2. A deterministic mapper converts extracted elements into the qualification schema from [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md), including qualification-level metadata, shared units, learning outcomes, assessment criteria, and validation rules.
+2. A deterministic mapper converts extracted elements into the qualification schema from [QualStructure.md](../../../QualStructure.md), including qualification-level metadata, shared units, learning outcomes, assessment criteria, and validation rules.
 3. A review UI renders a hierarchical visualization with source-page references and confidence signals across qualifications, units, learning outcomes, and assessment criteria.
 4. Reviewers can either edit extracted values directly or adjust extraction inputs and reprocess the document.
 5. Deterministic validation checks confirm GLH totals, credit totals, mandatory coverage, and optional-group rules before approval can proceed.
@@ -311,7 +311,7 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 
 #### Data Requirements
 - **Training / evaluation data**: A pilot corpus of qualification PDFs with manually verified target structures, including multi-qualification documents and shared-unit cases
-- **Grounding data**: The qualification schema defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md), plus prompt-derived mapping rules for learning outcomes, assessment criteria, grade descriptors, command verbs, and validation logic
+- **Grounding data**: The qualification schema defined in [QualStructure.md](../../../QualStructure.md), plus prompt-derived mapping rules for learning outcomes, assessment criteria, grade descriptors, command verbs, and validation logic
 - **Data sensitivity**: Internal, no personal data expected
 - **Volume**: Initial pilot volume to be defined; design should not assume single-document-only scale
 
@@ -476,8 +476,8 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 - Prompt and schema definitions that specify multi-qualification handling, shared-unit identity, and validation rules
 
 ### Constraints
-- The system must align to the qualification schema defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md).
-- The system must align to the extraction rules in [prompts/qualification-extractor.md](c:\Users\rsharma\OneDrive%20-%20Microsoft\Documents\GitHub\QualsDemo\prompts\qualification-extractor.md).
+- The system must align to the qualification schema defined in [QualStructure.md](../../../QualStructure.md).
+- The system must align to the extraction rules in [prompts/qualification-extractor.md](../../../prompts/qualification-extractor.md).
 - The target delivery surface is a web application.
 - Persistence must happen through an API only.
 - No direct database insertion is allowed.
@@ -557,7 +557,7 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 ## 13. Appendix
 
 ### A. Target Qualification Structure
-The extraction target is the qualification model documented in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md), plus the extraction-specific detail defined in the revised prompt, including:
+The extraction target is the qualification model documented in [QualStructure.md](../../../QualStructure.md), plus the extraction-specific detail defined in the revised prompt, including:
 - One or more Qualifications per source document
 - Shared Units with stable reuse identifiers
 - Learning Outcomes linked to Units

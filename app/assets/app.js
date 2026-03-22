@@ -328,17 +328,10 @@
           ${sharedInfo ? `<span class="badge badge-neutral">Shared across ${sharedInfo.count} qualifications</span>` : ""}
         </div>
         <div class="source-frame">
-          <div class="source-focus ${selectedNode && selectedNode.confidence >= 90 ? "is-verified" : ""}" style="top:${Number(focus.top || 31)}%;height:${Number(focus.height || 13)}%;">
-            <span>${escapeHtml(focus.label || "Focus: selected node")}</span>
-          </div>
           <div class="source-columns">
             <div>
               <p class="document-section-label">Qualification code</p>
               <p class="document-emphasis">${escapeHtml(job.qualificationCode || "Pending")}</p>
-            </div>
-            <div>
-              <p class="document-section-label">Review state</p>
-              <p class="document-emphasis">${escapeHtml(getReviewStateLabel(job))}</p>
             </div>
           </div>
           <p class="source-excerpt-title">Source excerpt</p>
@@ -375,10 +368,7 @@
           <span>Assessment criteria</span>
           <strong>${summary.counts.assessmentCriteria}</strong>
         </div>
-        <div class="summary-card">
-          <span>Ready to persist</span>
-          <strong>${job.status === "review" ? "Yes" : "After extraction"}</strong>
-        </div>
+
       </div>
       ${aiError ? `<div class="empty-state"><h4>AI extraction failed</h4><p>${escapeHtml(aiError)}</p></div>` : ""}
       ${job.artifact ? `<div class="spec-pdf-action"><button class="secondary-button" id="specPdfButton" type="button">Open uploaded PDF</button></div>` : ""}

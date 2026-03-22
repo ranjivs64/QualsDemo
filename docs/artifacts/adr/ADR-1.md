@@ -57,9 +57,9 @@ inputs:
 
 ## Context
 
-The product must extract qualification structures from uploaded PDFs, display the extracted structure in a web application, support reviewer edits and reprocessing, and persist reviewer-confirmed structures through a newly created API and backing database. The current product direction requires the review experience to summarize how many qualifications were discovered in each specification, show the structure for every qualification found, support shared units reused across qualifications, and make hierarchy groups expandable and collapsible for navigation. The target schema is defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md) and expanded in [PRD-1.md](../prd/PRD-1.md).
+The product must extract qualification structures from uploaded PDFs, display the extracted structure in a web application, support reviewer edits and reprocessing, and persist reviewer-confirmed structures through a newly created API and backing database. The current product direction requires the review experience to summarize how many qualifications were discovered in each specification, show the structure for every qualification found, support shared units reused across qualifications, and make hierarchy groups expandable and collapsible for navigation. The target schema is defined in [QualStructure.md](../../../QualStructure.md) and expanded in [PRD-1.md](../prd/PRD-1.md).
 
-An additional implementation constraint now exists: the active extractor prompt defines an authoritative external AI contract that does not match the application's legacy internal review graph. The runtime now sends the uploaded PDF artifact directly to the model through a structured-output Responses API path, and local parsing is retained only for page-count and source-excerpt metadata. The architecture therefore needs an explicit compatibility boundary so the external AI contract can evolve without forcing same-day changes to review, persistence, and UI consumers.
+An additional implementation constraint now exists: the active extractor prompt defines an authoritative external AI contract that does not match the application's legacy internal review graph. In the current runtime, the uploaded PDF is retained as a server-side artifact, analyzed first with Azure AI Document Intelligence `prebuilt-layout` in markdown mode, and only then is the extracted markdown plus workflow context sent to the model through the structured-output Responses API path. The architecture therefore needs an explicit compatibility boundary so the external AI contract can evolve without forcing same-day changes to review, persistence, and UI consumers.
 
 ### Requirements
 - Web application delivery surface.
@@ -138,13 +138,13 @@ We will build a web-based, asynchronous, human-in-the-loop extraction platform c
 - a provider-adapter boundary for managed layout-aware document AI,
 - deterministic schema mapping and review-summary enrichment services,
 - a relational system of record for approved qualification structures,
-- isolated object storage for uploaded PDFs and extracted payload artifacts,
+- isolated artifact storage for uploaded PDFs and extracted payload artifacts, using the local filesystem in the current runtime and object storage in the target production shape,
 - and an auditable approval and submission workflow.
 
 ### Key architectural choices
 - Use a managed PDF-capable AI model behind a provider adapter rather than a direct hard-coded vendor dependency.
 - Use a two-contract boundary: authoritative AI output externally, deterministic normalization into the current internal review graph internally.
-- Send the uploaded PDF artifact directly to the model and treat it as the only extraction evidence source.
+- Treat the uploaded PDF artifact as the source document, but use Azure AI Document Intelligence markdown output as the current model input surface.
 - Use asynchronous extraction jobs instead of synchronous request-response processing for the full workflow.
 - Use a relational database as the system of record because qualifications, units, grade schemes, groups, and rulesets are highly relational.
 - Use a dedicated persistence API boundary between review workflow and database writes.
@@ -158,12 +158,13 @@ We will build a web-based, asynchronous, human-in-the-loop extraction platform c
 graph TD
  U[Reviewer] --> W[Web Review App]
  W --> A[Application API]
- A --> J[Job Orchestrator]
+ A --> J[In-Process Job Orchestrator]
  A --> R[Review and Persistence Service]
- J --> S[Secure Object Storage]
- J --> X[Extraction Provider Adapter]
- X --> P[Managed Document AI Provider]
- J --> M[Schema Mapping Service]
+ J --> S[Artifact Storage]
+ J --> DI[Azure AI Document Intelligence]
+ DI --> X[Authoritative AI Extraction Adapter]
+ X --> P[Managed Responses API Model]
+ J --> M[Normalization and Schema Mapping Service]
  M --> V[Structure Summary Service]
  R --> Q[Qualification Persistence API]
  Q --> D[(Relational Database)]
@@ -317,7 +318,7 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 | Plain OCR and rules only | Low | High | Low | FAIL |
 
 ### Agent architecture pattern
-- Single extraction pipeline with direct PDF model input and deterministic post-processing
+- Single extraction pipeline with Document Intelligence markdown as model input and deterministic post-processing
 - Human-in-the-loop review and approval
 - Hybrid architecture with AI-assisted extraction, an authoritative external AI contract, and deterministic normalization into the internal review graph
 - Local PDF parsing used only for metadata enrichment, not qualification-structure generation
@@ -381,3 +382,4 @@ graph LR
 | Date | Reviewer | Outcome | Notes |
 |------|----------|---------|------|
 | 2026-03-16 | Solution Architect Agent | Accepted | Initial architecture decision based on PRD and external research |
+| 2026-03-22 | Solution Architect Agent | Accepted | Updated to match the live runtime: Document Intelligence markdown feeds the Responses API, artifacts are filesystem-backed in the current deployment, and the review flow persists through `server/databaseStore.js` |

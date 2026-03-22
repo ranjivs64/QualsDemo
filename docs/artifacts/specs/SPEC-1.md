@@ -26,9 +26,9 @@ inputs:
 
 **Issue**: #1  
 **Epic**: #1  
-**Status**: Draft  
+**Status**: Accepted  
 **Author**: Solution Architect Agent  
-**Date**: 2026-03-16  
+**Date**: 2026-03-22  
 **Related ADR**: [ADR-1.md](../adr/ADR-1.md)  
 **Related PRD**: [PRD-1.md](../prd/PRD-1.md)
 
@@ -70,7 +70,7 @@ The design prioritizes four things:
 ## 2. Goals and Non-Goals
 
 ### Goals
-- Support the qualification model defined in [QualStructure.md](c:\Piyush%20-%20Personal\GenAI\PearsonQual\QualStructure.md).
+- Support the qualification model defined in [QualStructure.md](../../../QualStructure.md).
 - Deliver a browser-based review workspace.
 - Separate extraction from persistence through an approval gate.
 - Support both reviewer edit and reprocess workflows.
@@ -92,7 +92,7 @@ The design prioritizes four things:
 
 ## 3. Architecture
 
-### 3.1 High-level system architecture
+### 3.1 Current runtime architecture
 
 ```mermaid
 flowchart TD
@@ -103,12 +103,13 @@ flowchart TD
  G --> R["Review Workspace Service"]
  G --> P["Qualification Persistence API"]
 
- O --> S["Secure Object Storage"]
- O --> Q["Job Queue"]
+ O --> S["Local Artifact Storage"]
+ O --> Q["In-Process Scheduler"]
  Q --> E["Extraction Worker"]
- E --> A["Extraction Provider Adapter"]
- A --> X["Managed Document AI Provider"]
- E --> M["Schema Mapping Service"]
+ E --> DI["Azure AI Document Intelligence"]
+ DI --> A["Authoritative AI Extraction Adapter"]
+ A --> X["Managed Responses API Model"]
+ E --> M["Normalization and Schema Mapping Service"]
  M --> V["Structure Summary Service"]
 
  R --> D[("Relational Database")]
@@ -127,9 +128,9 @@ flowchart TD
 | Concern | Choice | Reason |
 |--------|--------|--------|
 | User interaction | Web application | Product requirement |
-| Extraction execution | Asynchronous jobs | PDFs vary in size and processing time |
+| Extraction execution | Asynchronous in-process jobs | PDFs vary in size and processing time, and the current runtime uses `setTimeout` scheduling plus startup rescan |
 | Persistence | REST API plus relational database | Strong domain relationships and approval boundary |
-| Extraction provider | Adapter over managed document AI | Quality and future substitution |
+| Extraction provider | Azure AI Document Intelligence plus a Responses API adapter | Layout-aware extraction is separated from authoritative structured generation |
 | Review gating | Human-in-the-loop structure review | Product requirement and risk containment |
 
 ### 3.3 Primary workflow
@@ -140,6 +141,7 @@ sequenceDiagram
  participant Web as Web App
  participant Api as Application API
  participant Orchestrator as Job Orchestrator
+ participant DI as Document Intelligence
  participant Extractor as Extraction Worker
  participant Review as Review Service
  participant Persist as Persistence API
@@ -149,7 +151,9 @@ sequenceDiagram
  Web->>Api: Create extraction job
  Api->>Orchestrator: Queue job and store artifact
  Orchestrator->>Extractor: Start extraction
- Extractor->>Extractor: Extract, map, summarize
+ Extractor->>DI: Analyze PDF to markdown and layout metadata
+ DI->>Extractor: Return markdown content and document metrics
+ Extractor->>Extractor: Generate authoritative draft, normalize, map, summarize
  Extractor->>Db: Save draft extraction result
  Reviewer->>Web: Open review workspace
  Web->>Review: Load draft structure
@@ -168,11 +172,11 @@ sequenceDiagram
 | Browser app | Keep current web review application | No architectural change required in the reviewer experience |
 | Application API | Keep Node.js API as the system entrypoint | Continues to own upload, job state, review, approval, and persistence orchestration |
 | Extraction worker | Keep extraction orchestration in Node.js | Existing `server/extractionService.js` remains the workflow boundary |
-| AI provider | Use an OpenAI-compatible provider adapter that can call Azure AI Foundry or OpenAI Responses API endpoints | The worker sends the uploaded PDF artifact directly to the configured model |
+| Document analysis | Keep Azure AI Document Intelligence as the first extraction stage | The worker sends the stored PDF artifact to `prebuilt-layout` and uses markdown output plus document metrics |
+| AI provider | Use an OpenAI-compatible provider adapter that can call Azure AI Foundry or OpenAI Responses API endpoints | The worker sends Document Intelligence markdown and workflow context to the configured model |
 | Prompt and schema assets | Keep prompt markdown and JSON schema assets in the repo | The external authoritative schema remains version-controlled separately from the internal normalized review contract |
 | Compatibility boundary | Keep deterministic normalization in `server/aiDraftNormalizer.js` | The review workspace continues to consume the internal graph even though the model returns the authoritative contract |
-| Local PDF analysis | Keep lightweight `pdf-parse` usage for metadata only | Page count and source excerpt are derived locally, but qualification structure is not |
-| Observability | Extend OpenTelemetry to Azure Application Insights | Preserve current tracing model while moving telemetry to a centralized backend |
+| Observability | Keep the current OpenTelemetry tracer provider and add an exporter when central telemetry is required | App Insights exists in Azure, but the current runtime does not yet export traces there |
 | Evaluation | Add Foundry evaluation runs before model changes | Use schema compliance, completeness, and quality thresholds before promotion |
 
 This target keeps the current application architecture intact while moving model hosting, model versioning, evaluation, and operational governance into Azure AI Foundry. It avoids a second AI runtime until the extraction pipeline requires multi-step agent orchestration.
@@ -191,12 +195,12 @@ This target keeps the current application architecture intact while moving model
 | Backend runtime | Node.js | CommonJS modules with a lightweight built-in HTTP server |
 | HTTP layer | `node:http` | No Express or full backend framework is currently used |
 | Database | SQLite via `node:sqlite` | Local relational persistence for jobs, drafts, and approved qualification data |
-| File storage | Local filesystem | Uploaded PDFs retained in a server-side uploads folder for one day |
-| PDF analysis | `pdf-parse` | Used only for page count and source excerpt metadata; not used to generate qualification structures |
-| AI extraction | Provider adapter over the OpenAI-compatible SDK Responses API | Sends the uploaded PDF artifact as `input_file` and enforces a strict authoritative JSON schema |
-| AI prompt contract | Authoritative prompt plus authoritative structured-output schema, then normalized internal review graph | The attached PDF is the only extraction evidence source, and the normalizer isolates review consumers from prompt evolution |
-| Observability | OpenTelemetry API and Node tracer provider | Current tracing is focused on AI extraction spans |
-| Testing | Node built-in test runner | Covers workflow state, direct-PDF AI extraction, no-heuristic pending drafts, and normalized persistence |
+| File storage | Local filesystem | Uploaded PDFs are retained under `QUAL_UPLOADS_DIR` or `server/uploads` for one day |
+| Document analysis | Azure AI Document Intelligence `prebuilt-layout` | Produces markdown content plus page and structure metrics for the AI step |
+| AI extraction | Provider adapter over the OpenAI-compatible SDK Responses API | Sends Document Intelligence markdown and workflow context to the configured model and enforces a strict authoritative JSON schema |
+| AI prompt contract | Authoritative prompt plus authoritative structured-output schema, then normalized internal review graph | The uploaded PDF remains the source artifact, but the current model input is Document Intelligence markdown rather than direct file attachment |
+| Observability | OpenTelemetry API and Node tracer provider | Current tracing is local-process only; no Application Insights exporter is wired yet |
+| Testing | Node built-in test runner | Covers workflow state, Document Intelligence mediated AI extraction, pending drafts, and normalized persistence |
 
 ### 4.2 Current implementation artifacts
 
@@ -205,10 +209,12 @@ This target keeps the current application architecture intact while moving model
 | App entrypoint | `server.js` |
 | Browser application | `app/` |
 | Workflow and persistence facade | `server/jobStore.js` |
-| Relational schema and queries | `server/database.js` |
+| Relational schema and queries | `server/databaseStore.js` |
 | Extraction orchestration | `server/extractionService.js` |
 | AI client integration | `server/aiClient.js` |
+| Document analysis integration | `server/documentIntelligenceClient.js` |
 | AI draft normalizer | `server/aiDraftNormalizer.js` |
+| Artifact retention and lookup | `server/uploadStore.js` |
 | Prompt definition | `prompts/qualification-extractor.md` |
 | Authoritative structured output schema | `templates/qualification-extraction-authoritative-schema.json` |
 | Internal normalized review contract reference | `templates/qualification-extraction-schema.json` |
@@ -233,7 +239,7 @@ This target keeps the current application architecture intact while moving model
 | SQLite first | Gives relational integrity without external infrastructure |
 | File-based prompt and schema assets | Keeps AI behavior reviewable and version-controlled |
 | Vanilla frontend | Avoids framework overhead while the workflow is still being shaped |
-| OpenAI-compatible Responses API path with direct PDF input | Keeps the extraction evidence source aligned with the uploaded artifact and avoids maintaining a parallel heuristic parser |
+| Document Intelligence plus OpenAI-compatible Responses API | Separates layout recovery from authoritative structure generation and matches the current production code path |
 
 ### 4.5 Recommended Azure transition path
 
@@ -244,7 +250,7 @@ This target keeps the current application architecture intact while moving model
 | Prompting | Existing repo prompt plus JSON schema contract | Planner-based or multi-agent prompt sets |
 | Evaluation | Foundry evals plus repo regression fixtures | Full autonomous optimization loop |
 | Telemetry | OpenTelemetry exported to Application Insights | Cross-service distributed traces across multiple AI workers |
-| Workflow complexity | Single structured extraction call with direct PDF file input | Multi-step agent workflow with tool orchestration |
+| Workflow complexity | Document Intelligence analysis followed by a single structured extraction call | Multi-step agent workflow with tool orchestration |
 
 The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.js plus MAF. MAF becomes justified only if extraction evolves into a separate AI workflow service with tool-calling, reflection, or multi-stage review and refinement loops.
 
@@ -281,15 +287,15 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 |-----------|----------------|
 | Job state management | Track queued, running, completed, failed, rejected, and approved states |
 | Artifact lifecycle | Store uploads and transient extracted artifacts with retention policy |
-| Queue dispatch | Decouple user upload from extraction execution |
+| In-process dispatch | Decouple user upload from extraction execution through scheduled background work in the current single-process runtime |
 | Retry coordination | Retry transient failures safely |
-| Metadata enrichment | Derive page count and source excerpt from the uploaded PDF without producing a heuristic qualification draft |
+| Metadata enrichment | Derive page count, source excerpt, and document structure metrics from Document Intelligence output without producing a heuristic qualification draft |
 
 ### 5.4 Extraction Worker
 
 | Stage | Responsibility |
 |------|----------------|
-| Provider invocation | Call the configured Responses API endpoint with the uploaded PDF artifact attached as `input_file` |
+| Provider invocation | Call Azure AI Document Intelligence with the stored PDF artifact, then call the configured Responses API endpoint with the resulting markdown and workflow context |
 | Authoritative contract validation | Parse and validate the model response against the authoritative `Qualifications` schema |
 | Normalization | Convert authoritative provider output into the internal review graph through `server/aiDraftNormalizer.js` |
 | Schema mapping | Map normalized elements to qualifications, shared units, outcomes, criteria, and rule entities |
@@ -304,7 +310,7 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 | Source linking | Resolve page and section references for selected nodes |
 | Change tracking | Track edits made by reviewers |
 | Shared-unit projection | Show where one unit is reused across multiple qualifications or groups |
-| Structure summary | Return discovered qualification counts, nested entity counts, and persistence readiness |
+| Structure summary | Return discovered qualification counts, nested entity counts, and current approval availability |
 | Reprocess lineage | Preserve attempt history across reruns |
 | Approval packaging | Produce immutable approved submission payload |
 
@@ -602,7 +608,7 @@ flowchart TD
  A --> Auth["Identity and Access Control"]
  A --> Upload["Upload Validation"]
  Upload --> Scan["Malware and Type Validation"]
- Upload --> Store["Isolated Object Storage"]
+ Upload --> Store["Isolated Artifact Storage"]
  A --> Persist["Persistence API"]
  Persist --> Db[("Relational Database")]
 
@@ -618,7 +624,7 @@ flowchart TD
 |------------|------------------|
 | File upload abuse | Extension allow-list, MIME validation, content validation, size limits, malware scanning, random storage names, no direct public execution |
 | Unauthorized access | Authenticated access only, role-based authorization for upload, review, approve, and submit |
-| Artifact exposure | Isolated storage, signed access for review fetches, time-bounded access tokens |
+| Artifact exposure | Isolated server-side storage in the current runtime, artifact streaming only through the application API, and time-bounded signed access if the target object-storage design is introduced later |
 | Tampering | Immutable approved submission package, audit logging, content hashing |
 | Replay and duplicate submission | Idempotency key on submission API |
 | Transport security | TLS for all application and provider communication |
@@ -659,7 +665,7 @@ If pilot onboarding reveals hidden personal data in some document classes, the s
 |------|------------------|
 | Web app | Horizontal scaling |
 | Application API | Horizontal scaling |
-| Job orchestration | Queue-backed worker scaling |
+| Job orchestration | In-process scheduling today; queue-backed worker scaling when multi-instance execution is required |
 | Extraction workers | Independent horizontal worker pool |
 | Database | Vertical first, read-optimized paths later if required |
 
@@ -713,7 +719,7 @@ stateDiagram-v2
 
 | Metric family | Example metrics |
 |--------------|-----------------|
-| Workflow | Upload count, job queue depth, run success rate, reprocess rate |
+| Workflow | Upload count, jobs in processing or backlog, run success rate, reprocess rate |
 | Quality | First-pass approval rate, unresolved field count, edit frequency, rejection frequency |
 | Performance | Job latency, provider latency, review load time, submission latency |
 | Reliability | Extraction failure rate, submission failure rate, retry rate |
@@ -734,7 +740,7 @@ stateDiagram-v2
 
 ### 11.3 Observability posture
 
-The architecture should capture traceable workflow correlation from upload to approved submission. Provider interaction telemetry should include provider name and model version so quality regressions can be tied to concrete upstream changes.
+The architecture should capture traceable workflow correlation from upload to approved submission. Provider interaction telemetry should include provider name, model version, and Document Intelligence metadata so quality regressions can be tied to concrete upstream changes. The current runtime initializes an OpenTelemetry tracer provider locally; exporting that telemetry to Application Insights remains a next-step operational enhancement rather than a completed capability.
 
 **Confidence: HIGH**
 

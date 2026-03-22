@@ -1,6 +1,6 @@
 # QualExtract MVP
 
-QualExtract MVP is a Node.js web application for extracting qualification structure from qualification PDFs, reviewing low-confidence fields, and persisting approved qualification records.
+QualExtract MVP is a Node.js web application for extracting qualification structure from qualification PDFs, reviewing extracted qualification hierarchies with confidence signals, and persisting approved qualification records.
 
 The current implementation is optimized for local development and internal staging. It supports:
 
@@ -17,8 +17,8 @@ The solution has four main parts:
 1. Web UI in `app/`
    - Upload PDFs
    - Review extracted qualification hierarchy
-   - Verify low-confidence fields
-   - Approve persisted records
+   - Inspect confidence and shared-structure signals
+   - Approve reviewed records for persistence
 
 2. HTTP server in `server.js`
    - Serves the browser application
@@ -27,7 +27,7 @@ The solution has four main parts:
 
 3. Extraction pipeline in `server/`
    - `extractionService.js` resolves the uploaded PDF artifact, derives lightweight metadata, and orchestrates extraction jobs
-   - `aiClient.js` sends the PDF directly to either OpenAI or Azure AI Foundry through the Responses API and validates the authoritative response
+   - `aiClient.js` sends Document Intelligence markdown and workflow context to either OpenAI or Azure AI Foundry through the Responses API and validates the authoritative response
    - `aiDraftNormalizer.js` maps the authoritative AI contract into the internal review graph used by the UI and persistence flow
 
 4. Persistence and artifacts
