@@ -94,13 +94,13 @@ Example using Azure AI Foundry:
 
 ```env
 QUAL_AI_PROVIDER=foundry
-QUAL_AI_TIMEOUT_MS=120000
+QUAL_AI_TIMEOUT_MS=300000
 DOCUMENT_INTELLIGENCE_ENDPOINT=https://<your-document-intelligence-resource>.cognitiveservices.azure.com
 DOCUMENT_INTELLIGENCE_API_KEY=<your-document-intelligence-key>
 DOCUMENT_INTELLIGENCE_API_VERSION=2024-11-30
 DOCUMENT_INTELLIGENCE_MODEL=prebuilt-layout
 DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT=markdown
-DOCUMENT_INTELLIGENCE_TIMEOUT_MS=120000
+DOCUMENT_INTELLIGENCE_TIMEOUT_MS=300000
 FOUNDRY_API_KEY=<your-foundry-key>
 FOUNDRY_ENDPOINT=https://<your-resource-name>.openai.azure.com
 FOUNDRY_API_VERSION=2025-03-01-preview
@@ -113,13 +113,13 @@ Example using OpenAI:
 
 ```env
 QUAL_AI_PROVIDER=openai
-QUAL_AI_TIMEOUT_MS=120000
+QUAL_AI_TIMEOUT_MS=300000
 DOCUMENT_INTELLIGENCE_ENDPOINT=https://<your-document-intelligence-resource>.cognitiveservices.azure.com
 DOCUMENT_INTELLIGENCE_API_KEY=<your-document-intelligence-key>
 DOCUMENT_INTELLIGENCE_API_VERSION=2024-11-30
 DOCUMENT_INTELLIGENCE_MODEL=prebuilt-layout
 DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT=markdown
-DOCUMENT_INTELLIGENCE_TIMEOUT_MS=120000
+DOCUMENT_INTELLIGENCE_TIMEOUT_MS=300000
 OPENAI_API_KEY=<your-openai-key>
 QUAL_AI_MODEL=gpt-5.1-2026-01-15
 QUAL_DB_PATH=server/data/qualextract.sqlite
@@ -130,8 +130,8 @@ Notes:
 
 - Azure OpenAI extraction uses the Responses API. When you configure Foundry via `FOUNDRY_ENDPOINT`, use `FOUNDRY_API_VERSION=2025-03-01-preview` or later.
 - Azure AI Document Intelligence should use `DOCUMENT_INTELLIGENCE_MODEL=prebuilt-layout` with `DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT=markdown` so the LLM receives preserved headings, tables, and page boundaries.
-- `QUAL_AI_TIMEOUT_MS` defaults to `120000` and should remain high enough for multi-page PDF extraction jobs.
-- `DOCUMENT_INTELLIGENCE_TIMEOUT_MS` defaults to `120000` and should remain high enough for large PDFs.
+- For Azure deployments in this repo, set both `QUAL_AI_TIMEOUT_MS` and `DOCUMENT_INTELLIGENCE_TIMEOUT_MS` to `300000`; that is the validated large-document budget currently codified in Bicep.
+- The code-level fallback remains `120000` if you omit those variables outside the Azure deployment path.
 - Use either `FOUNDRY_ENDPOINT` or `FOUNDRY_BASE_URL`, not both.
 - If Document Intelligence or the LLM provider is not configured, the app still runs, but extraction jobs remain in review with an `aiError` until configuration is fixed.
 

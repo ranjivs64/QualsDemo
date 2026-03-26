@@ -94,6 +94,7 @@ Teams will continue to rely on manual interpretation of PDFs, causing long lead 
 2. Achieve review-approved structured output for the qualification schema in a single workflow.
 3. Ensure persistence occurs only through an API after explicit user confirmation.
 4. Support prompt-defined extraction depth, including multi-qualification documents, shared units, learning outcomes, assessment criteria, and validation rules.
+5. Support side-by-side internal environments so a `staging` deployment can validate changes without replacing the current `dev` deployment.
 
 ### Success Metrics
 
@@ -106,12 +107,14 @@ Teams will continue to rely on manual interpretation of PDFs, causing long lead 
 | Shared-unit reuse accuracy | Unknown | 100 percent of approved shared units persisted once and referenced many times | Within pilot |
 | Incorrect persistence before approval | Manual risk exists | 0 | Day 1 |
 | API persistence success after approval | Unknown | 99 percent or higher | Within pilot |
+| Staging deployment availability | No separate validated environment | Independent `staging` site available alongside `dev` | Before broad internal rollout |
 
 ### User Success Criteria
 - Users can upload a PDF and see the extracted qualification structure as a navigable hierarchy, including multiple qualifications when present.
 - Users can compare extracted content against the source document before approving it.
 - Users can approve or reject extracted entities without direct database access.
 - Users can review learning outcomes, assessment criteria, and shared-unit reuse before approval.
+- Operators can keep `dev` and `staging` live at the same time and compare behavior without overwriting one environment with the other.
 
 ---
 
@@ -256,6 +259,14 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
   - [ ] Submitted payload versions are retained or referentially recoverable.
   - [ ] Audit records identify whether a unit was shared, whether command verbs were extracted, and which validations passed or failed.
 
+9. **Environment isolation**: The platform supports separate internal Azure environments for side-by-side validation.
+ - **User Story**: As a platform operator, I want a `staging` deployment that runs beside `dev` so that I can validate new builds without disrupting the current live version.
+ - **Acceptance Criteria**:
+   - [ ] `dev` and `staging` are deployed as separate Azure web apps.
+   - [ ] Each environment has isolated upload storage, SQLite data, and job state.
+   - [ ] Each environment has its own Azure AI and telemetry resources.
+   - [ ] The current MVP does not share runtime state across environments.
+
 #### Should Have (P1)
 1. **Source-linked review**: Clicking an extracted node highlights the relevant PDF page or section.
  - **User Story**: As a reviewer, I want quick source linkage so that I can verify difficult sections faster.
@@ -372,6 +383,7 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 - **Error Handling**: Clear extraction, validation, and API submission errors
 - **Recovery**: Retry transient extraction/API failures safely
 - **Monitoring**: Health, latency, extraction quality, and submission outcomes tracked
+- **Deployment topology**: `dev` and `staging` must be able to run side-by-side, with `staging` reserved for internal validation before promoting changes to the primary live environment
 
 ---
 
@@ -426,6 +438,15 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 | US-5.2 | Reviewer | lightweight editing of extracted values | I can fix small issues without rerunning extraction | - [ ] edit mode limited to approved fields<br>- [ ] changes logged | P1 | 4 days |
 | US-5.3 | Reviewer | command verbs and grade descriptors normalized for review | I can preserve marking intent without reading every source paragraph | - [ ] extracted verbs displayed<br>- [ ] reviewer can correct normalization<br>- [ ] approved value retained in audit trail | P1 | 3 days |
 
+### Feature 6: Side-by-Side Environment Delivery
+**Description**: Support a separate Azure `staging` environment that can be deployed and validated without replacing `dev`.  
+**Priority**: P1
+
+| Story ID | As a... | I want... | So that... | Acceptance Criteria | Priority | Estimate |
+|----------|---------|-----------|------------|---------------------|----------|----------|
+| US-6.1 | Platform operator | a separate `staging` deployment | I can validate changes while `dev` remains live | - [ ] separate web app deployed<br>- [ ] separate AI resources provisioned<br>- [ ] separate telemetry provisioned | P1 | 2 days |
+| US-6.2 | Platform operator | isolated runtime state per environment | test traffic does not affect the current live data or jobs | - [ ] separate SQLite store per app instance<br>- [ ] separate uploads per app instance<br>- [ ] no cross-environment job visibility | P1 | 2 days |
+
 ---
 
 ## 7. User Flows
@@ -474,6 +495,7 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 - Authentication and authorization services for upload, review, and approval
 - An evaluation corpus of representative qualification PDFs and expected outputs
 - Prompt and schema definitions that specify multi-qualification handling, shared-unit identity, and validation rules
+- Azure capacity to provision an additional `staging` App Service, Key Vault, Application Insights instance, Azure OpenAI account, and Document Intelligence account in the selected region
 
 ### Constraints
 - The system must align to the qualification schema defined in [QualStructure.md](../../../QualStructure.md).
@@ -485,6 +507,7 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 - The workflow must accommodate semistructured and potentially long PDFs.
 - The workflow must accommodate documents that contain multiple qualifications and shared units.
 - Uploaded files must be handled under strict file-upload security controls.
+- Side-by-side environments are isolated by deployment boundary only; the current MVP does not support shared state across `dev` and `staging`.
 
 ---
 
@@ -502,6 +525,7 @@ Assumption flagged: no direct user interviews or internal support-ticket data we
 | Reviewers may disagree on what confidence means | Medium | Medium | Display confidence as a cue only and require user judgment for approval |
 | Sensitive data handling assumptions are wrong | Medium | Low | Reconfirm non-PII classification during pilot onboarding and adjust controls if needed |
 | Model or library changes degrade extraction quality | Medium | Medium | Pin model versions, maintain evaluation baseline, require regression testing before changes |
+| Staging and dev diverge operationally | Medium | Medium | Keep infrastructure parameterized from one Bicep entrypoint and validate both environments against the same smoke checks |
 
 
 ## 10. Timeline and Milestones

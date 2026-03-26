@@ -383,6 +383,26 @@ function markExtractionJobStarted(jobId) {
   });
 }
 
+function updateExtractionJobProgress(jobId, progress) {
+  return updateJob(jobId, (job) => {
+    if (job.status !== "processing") {
+      return;
+    }
+
+    job.extractionMeta = {
+      ...(job.extractionMeta || {}),
+      processingProgress: progress
+        ? {
+          ...(job.extractionMeta && job.extractionMeta.processingProgress ? job.extractionMeta.processingProgress : {}),
+          ...clone(progress)
+        }
+        : null
+    };
+    job.updatedAt = formatTimestamp();
+    synchronizeJobState(job);
+  });
+}
+
 function findNodeById(node, nodeId) {
   if (!node) {
     return null;
@@ -528,6 +548,7 @@ module.exports = {
   createUploadedJob,
   hydrateJobForReview,
   markExtractionJobStarted,
+  updateExtractionJobProgress,
   updateNodeField,
   verifyNode,
   updateApprovalOverride,

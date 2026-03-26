@@ -63,6 +63,8 @@ The design prioritizes four things:
 - relational integrity for qualification structures, including shared units and nested assessment entities,
 - and operational controls for uploads, retention, and audit.
 
+The current Azure deployment model also needs to support side-by-side internal environments. `dev` and `staging` must be independently deployable and independently testable without sharing runtime state.
+
 **Confidence: HIGH**
 
 ---
@@ -132,6 +134,17 @@ flowchart TD
 | Persistence | REST API plus relational database | Strong domain relationships and approval boundary |
 | Extraction provider | Azure AI Document Intelligence plus a Responses API adapter | Layout-aware extraction is separated from authoritative structured generation |
 | Review gating | Human-in-the-loop structure review | Product requirement and risk containment |
+| Environment topology | Separate `dev` and `staging` deployments | The current MVP uses local uploads, SQLite, and in-process jobs, so side-by-side validation requires isolated app instances |
+
+### 3.2.1 Environment topology
+
+| Environment | Purpose | Isolation boundary | Notes |
+|------------|---------|--------------------|-------|
+| `dev` | Current live internal environment | Separate App Service and AI resources | Used for the existing live version |
+| `staging` | Side-by-side validation environment | Separate App Service and AI resources | Used to validate new changes before replacing `dev` |
+| `prod` | Future hardened environment | Separate App Service and AI resources | Not yet appropriate for external production exposure |
+
+Each environment is isolated at the Azure resource level. Because the current MVP uses app-local SQLite and upload storage, uploads, jobs, and approved history do not flow across environments.
 
 ### 3.3 Primary workflow
 
@@ -202,6 +215,19 @@ This target keeps the current application architecture intact while moving model
 | Observability | OpenTelemetry API and Node tracer provider | Current tracing is local-process only; no Application Insights exporter is wired yet |
 | Testing | Node built-in test runner | Covers workflow state, Document Intelligence mediated AI extraction, pending drafts, and normalized persistence |
 
+### 4.1.1 Current Azure environment shape
+
+| Resource type | `dev` shape | `staging` shape |
+|--------------|-------------|-----------------|
+| App Service plan | Dedicated per environment | Dedicated per environment |
+| Web app | Dedicated per environment | Dedicated per environment |
+| Key Vault | Dedicated per environment | Dedicated per environment |
+| Application Insights | Dedicated per environment | Dedicated per environment |
+| Azure OpenAI account | Dedicated per environment | Dedicated per environment |
+| Document Intelligence account | Dedicated per environment | Dedicated per environment |
+
+This duplication is intentional. With the current MVP architecture, sharing those runtime resources would blur environment boundaries and complicate side-by-side validation.
+
 ### 4.2 Current implementation artifacts
 
 | Concern | Artifact |
@@ -230,6 +256,8 @@ This target keeps the current application architecture intact while moving model
 | Job orchestration | In-process scheduling | Queue-backed worker model |
 | AI provider | Single OpenAI-compatible path | Provider adapter model with Azure AI Foundry as the primary managed inference and evaluation backend |
 | Observability | Local tracing only | Centralized logs, metrics, and distributed tracing |
+
+Until the database and upload store move to managed shared services, every Azure environment must remain single-instance and independently stateful.
 
 ### 4.4 Stack rationale
 
@@ -290,6 +318,8 @@ The recommended next step is therefore Node.js plus Azure AI Foundry, not Node.j
 | In-process dispatch | Decouple user upload from extraction execution through scheduled background work in the current single-process runtime |
 | Retry coordination | Retry transient failures safely |
 | Metadata enrichment | Derive page count, source excerpt, and document structure metrics from Document Intelligence output without producing a heuristic qualification draft |
+
+Environment note: the orchestration service is scoped to a single deployment instance. Jobs created in `staging` are not visible in `dev`, and vice versa.
 
 ### 5.4 Extraction Worker
 
@@ -506,6 +536,8 @@ erDiagram
 | Approved submission audit | Retained as system audit record |
 | Approved qualification data | Retained as system of record |
 
+Retention is enforced per environment. There is no shared retention store across `dev` and `staging` in the current MVP.
+
 **Confidence: MEDIUM**  
 The PRD explicitly sets one-day retention for uploaded PDFs and rejected payloads. Approved audit retention is kept longer because without it the approval trail becomes non-durable.
 
@@ -618,6 +650,18 @@ flowchart TD
  style Db fill:#FFFDE7,stroke:#827717
 ```
 
+### 8.2 Environment isolation controls
+
+| Control | Current implementation |
+|--------|-------------------------|
+| Resource naming | Bicep includes `environmentName` in Azure resource names |
+| Upload isolation | Each web app writes to its own local upload directory |
+| Database isolation | Each web app uses its own local SQLite file |
+| Secret isolation | Each environment gets its own Key Vault and secret references |
+| Telemetry isolation | Each environment gets its own Application Insights resource |
+
+This isolation model is required for safe side-by-side validation while the MVP remains single-instance and filesystem-backed.
+
 ### 8.2 Controls
 
 | Threat area | Required control |
@@ -640,6 +684,8 @@ If pilot onboarding reveals hidden personal data in some document classes, the s
 ---
 
 ## 9. Performance
+
+Environment scaling note: adding `staging` improves release safety, not throughput. It creates a second isolated single-instance environment rather than horizontally scaling the same environment.
 
 ### 9.1 Targets
 
@@ -810,6 +856,16 @@ There is no legacy API or database in this workspace, so this is a greenfield pe
 | Extraction workers | Roll back provider adapter or mapping logic while preserving prior run records |
 | Persistence API | Versioned contract and idempotent submission handling |
 | Database | Forward-only schema migration policy recommended once system-of-record data exists |
+
+### 13.4 Side-by-side staging rollout
+
+1. Update the product and architecture artifacts to define the side-by-side environment model.
+2. Validate the shared Bicep template and the `staging` parameter file.
+3. Provision the `staging` Azure stack in the existing resource group with environment-specific names.
+4. Package and deploy the current application build to the new staging web app.
+5. Smoke-test `staging` health and AI status endpoints.
+6. Keep `dev` live while staging validation runs.
+7. Promote later by deploying the validated build to the primary environment rather than trying to share state between them.
 
 ---
 

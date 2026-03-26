@@ -78,6 +78,7 @@ An additional implementation constraint now exists: the active extractor prompt 
 - Qualification PDFs are assumed to be non-PII, but must still be handled securely.
 - Qualification families with fixed layouts are unknown; architecture must work for generalized semistructured documents first.
 - The workflow must remain auditable across upload, extraction, review, edit, reprocess, approval, and submission.
+- The current MVP must support side-by-side internal Azure environments, but each environment remains single-instance and state-isolated.
 
 ### AI-first assessment
 
@@ -141,6 +142,8 @@ We will build a web-based, asynchronous, human-in-the-loop extraction platform c
 - isolated artifact storage for uploaded PDFs and extracted payload artifacts, using the local filesystem in the current runtime and object storage in the target production shape,
 - and an auditable approval and submission workflow.
 
+For deployment topology, we will run separate Azure environments for `dev`, `staging`, and later `prod`, with each environment owning its own App Service, App Service plan, Key Vault, Application Insights instance, Azure OpenAI account, Document Intelligence account, local upload path, and SQLite database file. This preserves side-by-side validation while respecting the current MVP's single-instance storage and background-job constraints.
+
 ### Key architectural choices
 - Use a managed PDF-capable AI model behind a provider adapter rather than a direct hard-coded vendor dependency.
 - Use a two-contract boundary: authoritative AI output externally, deterministic normalization into the current internal review graph internally.
@@ -151,6 +154,7 @@ We will build a web-based, asynchronous, human-in-the-loop extraction platform c
 - Keep confidence informational only and require explicit reviewer approval.
 - Support both direct edit and guided reprocessing before approval.
 - Do not generate heuristic qualification drafts in the active runtime path.
+- Keep internal environments isolated rather than attempting cross-environment shared state while SQLite, local uploads, and in-process jobs remain in use.
 
 ### Reference architecture
 
@@ -275,17 +279,20 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 - Strong audit posture across the workflow.
 - Relational storage aligns naturally with the qualification model.
 - Provider adapter keeps future commercial leverage and migration options open.
+- Separate `staging` and `dev` deployments can run concurrently for side-by-side validation.
 
 ### Negative
 - Initial architecture is more complex than a simple upload-and-parse service.
 - External provider cost and service availability become platform concerns.
 - Provider evaluation and regression testing become mandatory operating disciplines.
 - Reviewer workflow design becomes a first-class success factor, not a secondary UI concern.
+- Every additional environment duplicates AI, telemetry, and app-hosting resources because the current MVP does not share those safely.
 
 ### Neutral
 - The system requires both transient artifact storage and persistent relational storage.
 - Confidence values remain advisory and do not reduce the need for review.
 - Qualification-family specializations are postponed until patterns are observed in production.
+- Environment isolation is operational, not logical; `dev` and `staging` do not share uploads, jobs, or SQLite state.
 
 ---
 
@@ -298,12 +305,14 @@ We chose **Option 1** because it best satisfies the PRD requirements while conta
 2. Build the asynchronous ingestion, authoritative-schema validation, normalization, mapping, and review-summary enrichment pipeline.
 3. Build the web review workspace with hierarchy visualization, discovered-qualification summaries, collapsible navigation, source linkage, edit, reprocess, and approval flows.
 4. Add audit, retention, monitoring, and provider evaluation controls.
+5. Provision side-by-side internal environments from the same Bicep entrypoint so `staging` can validate changes without replacing `dev`.
 
 ### Key milestones
 - Phase 1: Persistence schema and API contract complete.
 - Phase 2: Extraction orchestration, direct-PDF AI invocation, authoritative-schema validation, and normalization complete.
 - Phase 3: Review web application and approval flow complete.
 - Phase 4: Pilot evaluation, provider tuning, and operational hardening complete.
+- Phase 5: Independent `staging` environment provisioned and validated against the same smoke checks as `dev`.
 
 ---
 
@@ -363,6 +372,7 @@ graph LR
 | Uploaded artifact missing or unreadable | Medium | Fail into review with explicit `aiError`, retain job state, and require a valid PDF artifact before reprocessing |
 | Confidence misinterpreted as correctness | Medium | Advisory-only confidence labels and approval gate |
 | Provider outage | Medium | Retries, job state retention, adapter boundary for substitution |
+| Operators assume `staging` and `dev` share state | Medium | Document environment isolation explicitly and keep separate resource names, uploads, and SQLite files per environment |
 
 ---
 
@@ -383,3 +393,4 @@ graph LR
 |------|----------|---------|------|
 | 2026-03-16 | Solution Architect Agent | Accepted | Initial architecture decision based on PRD and external research |
 | 2026-03-22 | Solution Architect Agent | Accepted | Updated to match the live runtime: Document Intelligence markdown feeds the Responses API, artifacts are filesystem-backed in the current deployment, and the review flow persists through `server/databaseStore.js` |
+| 2026-03-22 | Solution Architect Agent | Accepted | Extended the deployment architecture to support a side-by-side `staging` environment with isolated Azure resources and runtime state |

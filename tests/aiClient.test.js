@@ -10,6 +10,9 @@ function loadAiClient() {
 function resetAiEnv() {
   delete process.env.QUAL_AI_PROVIDER;
   delete process.env.QUAL_AI_TIMEOUT_MS;
+  delete process.env.QUAL_AI_CHUNKING_ENABLED;
+  delete process.env.QUAL_AI_MAX_CHARS_PER_REQUEST;
+  delete process.env.QUAL_AI_CHUNK_OVERLAP_CHARS;
   delete process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_BASE_URL;
   delete process.env.FOUNDRY_API_KEY;
@@ -47,6 +50,11 @@ test("ai client defaults to openai when no provider is specified", { concurrency
 
   assert.equal(aiClient.getAiProviderName(), "openai");
   assert.equal(aiClient.getAiRequestTimeoutMs(), 120000);
+  assert.deepEqual(aiClient.getAiChunkingConfig(), {
+    enabled: false,
+    maxCharsPerRequest: 10000,
+    overlapChars: 800
+  });
   assert.equal(aiClient.isAiConfigured(), true);
   assert.deepEqual(aiClient.getAiStatus(), {
     provider: "openai",
@@ -375,4 +383,177 @@ test("extractQualificationWithAi normalizes authoritative payloads into the inte
   assert.equal(result.qualificationCode, "603/0455/0");
   assert.equal(result.sourceTextExcerpt, "Qualification specification excerpt");
   assert.equal(result.extractionMeta.contractVersion, "qualification-authoritative-v1");
+  assert.equal(result.extractionMeta.chunking.enabled, false);
+});
+
+test("extractQualificationWithAi keeps large documents single-pass unless chunking is explicitly enabled", { concurrency: false }, async () => {
+  process.env.OPENAI_API_KEY = "test-openai-key";
+  process.env.QUAL_AI_MAX_CHARS_PER_REQUEST = "120";
+  process.env.QUAL_AI_CHUNK_OVERLAP_CHARS = "20";
+  configureDocumentIntelligenceEnv();
+  const aiClient = loadAiClient();
+  const capturedRequests = [];
+  const fakeClient = {
+    responses: {
+      create: async (request) => {
+        capturedRequests.push(request);
+        return {
+          output_text: JSON.stringify({
+            Qualifications: {
+              confidence: 81,
+              needsAttention: false,
+              guidance: "",
+              qualifications: [
+                {
+                  id: "qualification-1",
+                  qualificationCode: "600/0001/0",
+                  qualificationName: "Qualification 1",
+                  qualificationType: "Diploma",
+                  level: "Level 3",
+                  awardingBody: "Pearson",
+                  gradingScheme: "Pass / Merit / Distinction",
+                  derivedFrom: null,
+                  rulesOfCombination: {
+                    totalCredits: 180,
+                    mandatoryCredits: 120,
+                    optionalCredits: 60,
+                    constraints: ["Complete all mandatory units"]
+                  },
+                  unitGroups: []
+                }
+              ]
+            }
+          })
+        };
+      }
+    }
+  };
+
+  const result = await aiClient.extractQualificationWithAi({
+    fileName: "large-spec.pdf",
+    documentAnalysis: {
+      content: `${"# Heading\n\nParagraph about qualification one. ".repeat(8)}\n\n${"## Heading\n\nParagraph about qualification two. ".repeat(8)}`,
+      contentFormat: "markdown",
+      pageCount: 32,
+      paragraphCount: 20,
+      tableCount: 2,
+      sectionCount: 6,
+      figureCount: 0,
+      keyValuePairCount: 0
+    },
+    extractionContext: {
+      confidence: 82,
+      pages: { current: 1, total: 32 },
+      documentFocus: { top: 28, height: 12, label: "Focus pending" },
+      sourceTextExcerpt: "Large qualification specification excerpt"
+    },
+    client: fakeClient
+  });
+
+  assert.equal(capturedRequests.length, 1);
+  assert.equal(result.extractionMeta.chunking.enabled, false);
+  assert.equal(result.extractionMeta.chunking.totalChunks, 1);
+});
+
+test("extractQualificationWithAi splits large document-intelligence markdown into chunked requests and merges them", { concurrency: false }, async () => {
+  process.env.OPENAI_API_KEY = "test-openai-key";
+  process.env.QUAL_AI_CHUNKING_ENABLED = "true";
+  process.env.QUAL_AI_MAX_CHARS_PER_REQUEST = "120";
+  process.env.QUAL_AI_CHUNK_OVERLAP_CHARS = "20";
+  configureDocumentIntelligenceEnv();
+  const aiClient = loadAiClient();
+  const capturedRequests = [];
+  const fakeClient = {
+    responses: {
+      create: async (request) => {
+        capturedRequests.push(request);
+        const chunkNumber = capturedRequests.length;
+        return {
+          output_text: JSON.stringify({
+            Qualifications: {
+              confidence: 80 + chunkNumber,
+              needsAttention: false,
+              guidance: "",
+              qualifications: [
+                {
+                  id: `qualification-${chunkNumber}`,
+                  qualificationCode: `600/000${chunkNumber}/0`,
+                  qualificationName: `Qualification ${chunkNumber}`,
+                  qualificationType: "Diploma",
+                  level: "Level 3",
+                  awardingBody: "Pearson",
+                  gradingScheme: "Pass / Merit / Distinction",
+                  derivedFrom: null,
+                  rulesOfCombination: {
+                    totalCredits: 180,
+                    mandatoryCredits: 120,
+                    optionalCredits: 60,
+                    constraints: ["Complete all mandatory units"]
+                  },
+                  unitGroups: [
+                    {
+                      id: `group-${chunkNumber}`,
+                      groupType: "Mandatory",
+                      selectionRule: "All listed units must be completed",
+                      minimumCredits: 120,
+                      maximumCredits: null,
+                      units: [
+                        {
+                          unitNumber: `Unit ${chunkNumber}`,
+                          unitTitle: `Unit title ${chunkNumber}`,
+                          glh: 90,
+                          creditValue: 10,
+                          assessmentType: "Internal",
+                          learningObjectives: [
+                            {
+                              id: `lo-${chunkNumber}`,
+                              text: `Learning objective ${chunkNumber}`
+                            }
+                          ],
+                          confidence: 90,
+                          needsAttention: false,
+                          guidance: ""
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          })
+        };
+      }
+    }
+  };
+  const progressSnapshots = [];
+
+  const result = await aiClient.extractQualificationWithAi({
+    fileName: "large-spec.pdf",
+    documentAnalysis: {
+      content: `${"# Heading\n\nParagraph about qualification one. ".repeat(8)}\n\n${"## Heading\n\nParagraph about qualification two. ".repeat(8)}`,
+      contentFormat: "markdown",
+      pageCount: 32,
+      paragraphCount: 20,
+      tableCount: 2,
+      sectionCount: 6,
+      figureCount: 0,
+      keyValuePairCount: 0
+    },
+    extractionContext: {
+      confidence: 82,
+      pages: { current: 1, total: 32 },
+      documentFocus: { top: 28, height: 12, label: "Focus pending" },
+      sourceTextExcerpt: "Large qualification specification excerpt"
+    },
+    client: fakeClient,
+    onProgress: (progress) => {
+      progressSnapshots.push(progress);
+    }
+  });
+
+  assert.equal(capturedRequests.length > 1, true);
+  assert.equal(result.qualifications.length, capturedRequests.length);
+  assert.equal(result.extractionMeta.chunking.enabled, true);
+  assert.equal(result.extractionMeta.chunking.totalChunks, capturedRequests.length);
+  assert.equal(progressSnapshots.some((progress) => progress.phase === "consolidation"), true);
 });

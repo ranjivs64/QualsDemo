@@ -64,6 +64,14 @@ param foundryApiKeySecretName string = 'foundry-api-key'
 ])
 param nodeEnvironment string = 'production'
 
+@description('Timeout in milliseconds for authoritative AI extraction requests.')
+@minValue(1)
+param qualAiTimeoutMs int = 300000
+
+@description('Timeout in milliseconds for Azure AI Document Intelligence analysis requests.')
+@minValue(1)
+param documentIntelligenceTimeoutMs int = 300000
+
 var normalizedProjectName = toLower(replace(replace(projectName, '-', ''), '_', ''))
 var resourceSuffix = uniqueString(resourceGroup().id, projectName, environmentName)
 var webAppName = toLower('app-${projectName}-${environmentName}-${take(resourceSuffix, 6)}')
@@ -244,12 +252,13 @@ resource webAppAppSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     APPLICATIONINSIGHTS_CONNECTION_STRING: applicationInsights.properties.ConnectionString
     NODE_ENV: nodeEnvironment
     QUAL_AI_PROVIDER: 'foundry'
+    QUAL_AI_TIMEOUT_MS: string(qualAiTimeoutMs)
     DOCUMENT_INTELLIGENCE_ENDPOINT: documentIntelligenceAccount.properties.endpoint
     DOCUMENT_INTELLIGENCE_API_KEY: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=${documentIntelligenceApiKeySecretName})'
     DOCUMENT_INTELLIGENCE_API_VERSION: documentIntelligenceApiVersion
     DOCUMENT_INTELLIGENCE_MODEL: documentIntelligenceModel
     DOCUMENT_INTELLIGENCE_OUTPUT_FORMAT: documentIntelligenceOutputFormat
-    DOCUMENT_INTELLIGENCE_TIMEOUT_MS: '120000'
+    DOCUMENT_INTELLIGENCE_TIMEOUT_MS: string(documentIntelligenceTimeoutMs)
     FOUNDRY_ENDPOINT: openAiAccount.properties.endpoint
     FOUNDRY_API_VERSION: foundryApiVersion
     QUAL_AI_MODEL: openAiDeployment.name

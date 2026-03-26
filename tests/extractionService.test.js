@@ -99,6 +99,7 @@ test("processExtractionJob converts an unresolved extraction into a review error
   const { extractionService, restore } = loadExtractionServiceWithMocks(
     {
       getAiConfigurationIssues: () => [],
+      getAiChunkingConfig: () => ({ enabled: false, maxCharsPerRequest: 18000, overlapChars: 1200 }),
       getAiProviderName: () => "openai",
       isAiConfigured: () => true,
       getModelName: () => "gpt-5.1-2026-01-15",
@@ -110,6 +111,7 @@ test("processExtractionJob converts an unresolved extraction into a review error
     },
     {
       getDocumentIntelligenceConfigurationIssues: () => [],
+      getDocumentIntelligenceRequestTimeoutMs: () => 5,
       getDocumentIntelligenceStatus: () => ({ model: "prebuilt-layout" }),
       isDocumentIntelligenceConfigured: () => true,
       analyzePdfWithDocumentIntelligence: () => ({
@@ -131,12 +133,12 @@ test("processExtractionJob converts an unresolved extraction into a review error
 
     assert.equal(updated.status, "review");
     assert.equal(updated.reviewReady, false);
-    assert.match(updated.extractionMeta.aiError, /Background extraction worker timed out after 15005ms\./);
+    assert.match(updated.extractionMeta.aiError, /Background extraction worker timed out after 15010ms\./);
     assert.equal(updated.extractionMeta.workerTimedOut, true);
 
     const persisted = getJob(created.id);
     assert.equal(persisted.status, "review");
-    assert.match(persisted.extractionMeta.aiError, /Background extraction worker timed out after 15005ms\./);
+    assert.match(persisted.extractionMeta.aiError, /Background extraction worker timed out after 15010ms\./);
   } finally {
     restore();
   }
@@ -159,6 +161,7 @@ test("createExtractionDraft sends Document Intelligence content to the LLM extra
   const { extractionService, restore } = loadExtractionServiceWithMocks(
     {
       getAiConfigurationIssues: () => [],
+      getAiChunkingConfig: () => ({ enabled: false, maxCharsPerRequest: 18000, overlapChars: 1200 }),
       getAiProviderName: () => "openai",
       isAiConfigured: () => true,
       getModelName: () => "gpt-5.1-2026-01-15",
@@ -209,6 +212,7 @@ test("createExtractionDraft sends Document Intelligence content to the LLM extra
     },
     {
       getDocumentIntelligenceConfigurationIssues: () => [],
+      getDocumentIntelligenceRequestTimeoutMs: () => 120000,
       getDocumentIntelligenceStatus: () => ({ model: "prebuilt-layout" }),
       isDocumentIntelligenceConfigured: () => true,
       analyzePdfWithDocumentIntelligence: async () => ({

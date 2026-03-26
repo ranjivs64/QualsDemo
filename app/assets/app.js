@@ -212,6 +212,7 @@
     jobs.forEach((job) => {
       const counts = getCounts(job);
       const aiError = getAiExtractionError(job);
+      const processingProgress = getProcessingProgress(job);
       const actionLabel = job.status === "persisted" ? "View" : job.status === "processing" ? "Track" : "Review";
       const qualifications = getQualifications(job);
       const qualTagsHtml = qualifications.length ? `
@@ -229,8 +230,9 @@
           <div class="job-icon" aria-hidden="true"></div>
           <div>
             <h4 class="job-name">${escapeHtml(job.fileName)}</h4>
-            <p class="job-meta">${escapeHtml(getStatusLabel(job.status))} | ${counts.qualifications} qual${counts.qualifications === 1 ? "" : "s"} | ${counts.sharedUnits} shared | ${escapeHtml(formatDate(job.updatedAt))}</p>
+            <p class="job-meta">${escapeHtml(getJobMetaSummary(job, counts, processingProgress))}</p>
             ${aiError ? `<p class="job-meta" style="color:var(--danger)">&#9888; ${escapeHtml(aiError)}</p>` : ""}
+            ${job.status === "processing" && processingProgress ? `<p class="job-meta">${escapeHtml(getProcessingProgressLabel(processingProgress))}</p>` : ""}
             ${qualTagsHtml}
           </div>
         </div>
@@ -298,9 +300,12 @@
     const selectedQualification = getSelectedQualification(job);
     const selectedNode = getSelectedNode(job, selectedQualification);
     const counts = getCounts(job);
+    const processingProgress = getProcessingProgress(job);
 
     elements.reviewSubtitle.textContent = aiError
       ? `${job.fileName} | AI extraction returned no reviewable qualifications | Source ${describeExtractionSource(job)}`
+      : job.status === "processing" && processingProgress
+        ? `${job.fileName} | ${getProcessingProgressLabel(processingProgress)} | Source ${describeExtractionSource(job)}`
       : `${job.fileName} | Discovered ${counts.qualifications} qualification${counts.qualifications === 1 ? "" : "s"} in this specification | ${counts.sharedUnits} shared unit${counts.sharedUnits === 1 ? "" : "s"} | Source ${describeExtractionSource(job)}`;
     elements.pageBadge.textContent = job.pages ? `Page ${job.pages.current} of ${job.pages.total}` : "Page pending";
     setReviewBadge(job);
@@ -805,6 +810,10 @@
       return "Persisted";
     }
     if (job.status === "processing") {
+      const processingProgress = getProcessingProgress(job);
+      if (processingProgress && processingProgress.chunking && processingProgress.chunking.enabled) {
+        return `Processing ${processingProgress.chunking.completedChunks || 0}/${processingProgress.chunking.totalChunks || 0}`;
+      }
       return "Processing";
     }
     if (job.reviewReady) {
@@ -830,6 +839,37 @@
       persisted: "Persisted",
       processing: "Processing"
     }[status] || startCase(status);
+  }
+
+  function getProcessingProgress(job) {
+    if (!job || !job.extractionMeta || !job.extractionMeta.processingProgress) {
+      return null;
+    }
+    return job.extractionMeta.processingProgress;
+  }
+
+  function getProcessingProgressLabel(progress) {
+    if (!progress) {
+      return "Extraction is running.";
+    }
+
+    const chunking = progress.chunking || null;
+    if (chunking && chunking.enabled && Number.isFinite(chunking.currentChunk) && Number.isFinite(chunking.totalChunks)) {
+      return `${progress.title || "Processing"} | chunk ${chunking.currentChunk} of ${chunking.totalChunks}`;
+    }
+
+    return progress.detail || progress.title || "Extraction is running.";
+  }
+
+  function getJobMetaSummary(job, counts, processingProgress) {
+    if (job.status === "processing" && processingProgress) {
+      const percentText = Number.isFinite(processingProgress.percent)
+        ? `${processingProgress.percent}%`
+        : "Processing";
+      return `${percentText} | ${getProcessingProgressLabel(processingProgress)} | ${formatDate(job.updatedAt)}`;
+    }
+
+    return `${getStatusLabel(job.status)} | ${counts.qualifications} qual${counts.qualifications === 1 ? "" : "s"} | ${counts.sharedUnits} shared | ${formatDate(job.updatedAt)}`;
   }
 
   function describeExtractionSource(job) {
